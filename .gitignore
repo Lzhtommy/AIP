@@ -1,0 +1,17 @@
+# 密钥与本地环境
+.env
+
+# Node
+node_modules/
+console/.next/
+console/test-results/
+console/playwright-report/
+*.tsbuildinfo
+
+# Python
+runtime/.venv/
+__pycache__/
+.pytest_cache/
+
+# 系统
+.DS_Store
