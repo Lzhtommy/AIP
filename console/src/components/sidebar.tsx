@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 
-export function Sidebar() {
+export function Sidebar({ userMenu }: { userMenu?: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
@@ -45,6 +45,7 @@ export function Sidebar() {
           系统状态
         </Link>
       </div>
+      {userMenu}
     </aside>
   );
 }

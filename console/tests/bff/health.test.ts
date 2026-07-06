@@ -1,22 +1,35 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AgentOSStub } from "../helpers/agentos-stub";
+import { login, registerUser } from "../helpers/auth";
+import { resetUsers } from "../helpers/db";
+import { consoleEnv } from "../helpers/env";
 import { startConsole, type TestServer } from "../helpers/next-server";
 
 const SECURITY_KEY = "test-security-key-do-not-leak";
+const EMAIL = "health-tester@example.com";
+const PASSWORD = "health-password-1";
+
+async function authedCookie(server: TestServer): Promise<string> {
+  await registerUser(server, EMAIL, PASSWORD); // 已存在则 409，忽略
+  const { cookie } = await login(server, EMAIL, PASSWORD);
+  return cookie;
+}
 
 describe("GET /api/os/health（BFF 健康代理）", () => {
   let stub: AgentOSStub;
   let server: TestServer;
+  let cookie: string;
 
   beforeAll(async () => {
+    await resetUsers();
     stub = new AgentOSStub().on("/health", {
       body: { status: "ok", version: "2.1.0" },
     });
     await stub.start();
-    server = await startConsole({
-      OS_ENDPOINT_URL: stub.url,
-      OS_SECURITY_KEY: SECURITY_KEY,
-    });
+    server = await startConsole(
+      consoleEnv({ OS_ENDPOINT_URL: stub.url, OS_SECURITY_KEY: SECURITY_KEY }),
+    );
+    cookie = await authedCookie(server);
   });
 
   afterAll(async () => {
@@ -25,7 +38,9 @@ describe("GET /api/os/health（BFF 健康代理）", () => {
   });
 
   it("runtime 健康时返回 200 与状态", async () => {
-    const res = await fetch(`${server.baseUrl}/api/os/health`);
+    const res = await fetch(`${server.baseUrl}/api/os/health`, {
+      headers: { cookie },
+    });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.status).toBe("ok");
@@ -34,7 +49,9 @@ describe("GET /api/os/health（BFF 健康代理）", () => {
   });
 
   it("以 Bearer Security Key 调用上游，且密钥与 runtime 地址绝不进入响应", async () => {
-    const res = await fetch(`${server.baseUrl}/api/os/health`);
+    const res = await fetch(`${server.baseUrl}/api/os/health`, {
+      headers: { cookie },
+    });
 
     const upstream = stub.requestsFor("/health");
     expect(upstream.length).toBeGreaterThan(0);
@@ -54,13 +71,14 @@ describe("GET /api/os/health（BFF 健康代理）", () => {
 
 describe("GET /api/os/health（runtime 不可达）", () => {
   let server: TestServer;
+  let cookie: string;
   const deadEndpoint = "http://127.0.0.1:1"; // 无监听端口，连接必然失败
 
   beforeAll(async () => {
-    server = await startConsole({
-      OS_ENDPOINT_URL: deadEndpoint,
-      OS_SECURITY_KEY: SECURITY_KEY,
-    });
+    server = await startConsole(
+      consoleEnv({ OS_ENDPOINT_URL: deadEndpoint, OS_SECURITY_KEY: SECURITY_KEY }),
+    );
+    cookie = await authedCookie(server);
   });
 
   afterAll(async () => {
@@ -68,7 +86,9 @@ describe("GET /api/os/health（runtime 不可达）", () => {
   });
 
   it("返回 502 结构化错误，且错误信息不泄漏内网地址", async () => {
-    const res = await fetch(`${server.baseUrl}/api/os/health`);
+    const res = await fetch(`${server.baseUrl}/api/os/health`, {
+      headers: { cookie },
+    });
     expect(res.status).toBe(502);
     const rawBody = await res.text();
     const body = JSON.parse(rawBody);

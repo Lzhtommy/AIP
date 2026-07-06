@@ -1,4 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { loginAs } from "./helpers";
+
+test.beforeEach(async ({ page }) => {
+  await loginAs(page, "e2e-smoke@example.com");
+});
 
 const NAV_LABELS = [
   "Chat 对话",

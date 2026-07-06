@@ -27,6 +27,11 @@ export default defineConfig({
       env: {
         OS_ENDPOINT_URL: `http://127.0.0.1:${STUB_PORT}`,
         OS_SECURITY_KEY: "e2e-security-key",
+        DATABASE_URL:
+          process.env.TEST_DATABASE_URL ??
+          "postgresql://ai:ai@localhost:5532/console",
+        AUTH_SECRET: "e2e-auth-secret",
+        AUTH_TRUST_HOST: "true",
       },
     },
   ],

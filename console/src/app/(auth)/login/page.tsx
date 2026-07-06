@@ -1,0 +1,97 @@
+"use client";
+
+import { signIn } from "next-auth/react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+
+function LoginForm() {
+  const search = useSearchParams();
+  const callbackUrl = search.get("callbackUrl") ?? "/";
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setPending(true);
+    setError(null);
+    const res = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    });
+    if (res?.error) {
+      setError("邮箱或密码错误");
+      setPending(false);
+      return;
+    }
+    window.location.href = callbackUrl;
+  }
+
+  return (
+    <Card className="w-full max-w-sm">
+      <CardHeader>
+        <CardTitle>登录 AIP Console</CardTitle>
+        <CardDescription>内部私有化 AgentOS 控制台</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label htmlFor="email" className="text-sm text-muted-foreground">
+              邮箱
+            </label>
+            <input
+              id="email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="password" className="text-sm text-muted-foreground">
+              密码
+            </label>
+            <input
+              id="password"
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <Button type="submit" className="w-full" disabled={pending}>
+            {pending ? "登录中…" : "登录"}
+          </Button>
+          <p className="text-center text-sm text-muted-foreground">
+            没有账号？{" "}
+            <Link href="/register" className="text-foreground underline">
+              注册
+            </Link>
+          </p>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
