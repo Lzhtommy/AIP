@@ -2,6 +2,7 @@
 import { createServer } from "node:http";
 
 const port = Number(process.env.STUB_PORT ?? 45678);
+let lastSeenUserId = null;
 
 const AGENTS = [
   {
@@ -64,8 +65,70 @@ const WORKFLOW_EVENTS = [
   { event: "WorkflowCompleted" },
 ];
 
+const SESSION_LIST = {
+  data: [
+    {
+      session_id: "sess-e2e",
+      session_name: "E2E 会话",
+      created_at: "2026-07-07T10:00:00Z",
+      updated_at: "2026-07-07T10:05:00Z",
+      session_type: "agent",
+      user_id: "any",
+      agent_id: "demo-assistant",
+    },
+  ],
+  meta: { page: 1, limit: 20, total_pages: 1, total_count: 1 },
+};
+
+function sessionDetail(userId) {
+  return {
+    session_id: "sess-e2e",
+    session_name: "E2E 会话",
+    user_id: userId,
+    agent_id: "demo-assistant",
+    chat_history: [],
+  };
+}
+
+const SESSION_RUNS = [
+  {
+    run_id: "run-e2e",
+    input: { input_content: "打个招呼" },
+    content: "你好，这是 **e2e** 的流式回复。",
+    tools: [
+      {
+        tool_call_id: "tc-e2e",
+        tool_name: "multiply",
+        tool_args: { a: 137, b: 73 },
+        result: "10001",
+      },
+    ],
+  },
+];
+
 createServer((req, res) => {
   const url = req.url ?? "";
+  // sessions：列表按请求的 user_id 回显归属，详情同理（stub 无状态）
+  if (url.startsWith("/sessions/sess-e2e/runs")) {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(SESSION_RUNS));
+    return;
+  }
+  if (url.startsWith("/sessions/sess-e2e")) {
+    const userId = new URL(url, "http://x").searchParams.get("user_id");
+    // 详情不带 user_id 参数——回显列表请求最近一次见到的 user_id
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(sessionDetail(lastSeenUserId ?? userId ?? "any")));
+    return;
+  }
+  if (url.startsWith("/sessions")) {
+    const userId = new URL(url, "http://x").searchParams.get("user_id");
+    if (userId) lastSeenUserId = userId;
+    const data = SESSION_LIST.data.map((s) => ({ ...s, user_id: userId ?? s.user_id }));
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ...SESSION_LIST, data }));
+    return;
+  }
   if (url === "/health") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ status: "ok", version: "e2e-stub" }));

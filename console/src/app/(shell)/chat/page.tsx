@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { ToolCallCard } from "@/components/tool-call-card";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { MessageBubble } from "@/components/chat-messages";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,66 +32,8 @@ const KIND_LABEL: Record<TargetKind, string> = {
   workflows: "Workflows",
 };
 
-function AssistantParts({ message }: { message: ChatMessage }) {
-  return (
-    <>
-      {message.parts.map((p, i) => {
-        switch (p.type) {
-          case "text":
-            return (
-              <div
-                key={i}
-                className="prose prose-sm prose-invert max-w-none [&_pre]:overflow-x-auto"
-              >
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{p.text}</ReactMarkdown>
-              </div>
-            );
-          case "tool":
-            return <ToolCallCard key={p.id + i} part={p} />;
-          case "member":
-            return (
-              <div
-                key={i}
-                className="mt-2 flex items-center gap-1 text-xs text-muted-foreground"
-                data-testid="member-marker"
-              >
-                <span>👤</span>
-                <span className="font-medium">{p.name}</span>
-              </div>
-            );
-          case "step":
-            return (
-              <div
-                key={i}
-                className="my-2 flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
-                data-testid="step-marker"
-              >
-                <span className="text-muted-foreground">▸</span>
-                <span>{p.name}</span>
-                <Badge
-                  variant={
-                    p.status === "running"
-                      ? "outline"
-                      : p.status === "done"
-                        ? "secondary"
-                        : "destructive"
-                  }
-                >
-                  {p.status === "running" ? "进行中…" : p.status === "done" ? "完成" : "失败"}
-                </Badge>
-              </div>
-            );
-        }
-      })}
-      {message.parts.length === 0 && <span>…</span>}
-      {message.interrupted && (
-        <p className="mt-1 text-xs text-muted-foreground">（已中断）</p>
-      )}
-    </>
-  );
-}
-
-export default function ChatPage() {
+function ChatPageInner() {
+  const search = useSearchParams();
   const [targets, setTargets] = useState<TargetItem[]>([]);
   const [target, setTarget] = useState<TargetItem | null>(null);
   const [chat, setChat] = useState<ChatState>(initialChatState);
@@ -122,9 +63,30 @@ export default function ChatPage() {
       );
       const flat = results.flat();
       setTargets(flat);
-      setTarget((prev) => prev ?? flat[0] ?? null);
+      const wantKind = search.get("kind");
+      const wantId = search.get("id");
+      const preferred = flat.find((t) => t.kind === wantKind && t.id === wantId);
+      setTarget((prev) => prev ?? preferred ?? flat[0] ?? null);
+
+      // 从 Sessions 页续聊：预载历史消息并接上 sessionId
+      const sessionId = search.get("session");
+      if (preferred && sessionId) {
+        const res = await fetch(
+          `/api/os/sessions/${encodeURIComponent(sessionId)}?kind=${preferred.kind}`,
+        );
+        if (res.ok) {
+          const detail = await res.json();
+          setChat({
+            messages: detail.messages ?? [],
+            sessionId,
+            status: "idle",
+            error: null,
+          });
+        }
+      }
     }
     loadAll().catch((e: Error) => setLoadError(e.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -266,25 +228,7 @@ export default function ChatPage() {
             </p>
           )}
           {chat.messages.map((m, i) => (
-            <div
-              key={i}
-              className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
-            >
-              <div
-                className={cn(
-                  "max-w-[85%] rounded-lg px-4 py-2 text-sm",
-                  m.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted",
-                )}
-              >
-                {m.role === "assistant" ? (
-                  <AssistantParts message={m} />
-                ) : (
-                  messageText(m)
-                )}
-              </div>
-            </div>
+            <MessageBubble key={i} message={m} />
           ))}
           {chat.status === "error" && (
             <div className="flex items-center gap-3">
@@ -326,5 +270,13 @@ export default function ChatPage() {
         </form>
       </section>
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense>
+      <ChatPageInner />
+    </Suspense>
   );
 }
