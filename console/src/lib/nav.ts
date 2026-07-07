@@ -7,7 +7,7 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { id: "chat", label: "Chat 对话", href: "/chat", planned: true },
+  { id: "chat", label: "Chat 对话", href: "/chat", planned: false },
   { id: "sessions", label: "Sessions 会话", href: "/sessions", planned: true },
   { id: "memory", label: "Memory 记忆", href: "/memory", planned: true },
   { id: "knowledge", label: "Knowledge 知识库", href: "/knowledge", planned: true },

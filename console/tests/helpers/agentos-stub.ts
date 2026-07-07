@@ -10,7 +10,9 @@ export interface RecordedRequest {
 
 export interface StubRoute {
   status?: number;
-  body: unknown;
+  body?: unknown;
+  /** 配置后按 SSE 流式返回这些事件（依次写出 data: 行） */
+  sse?: Array<Record<string, unknown>>;
 }
 
 /**
@@ -42,6 +44,17 @@ export class AgentOSStub {
         if (!route) {
           res.writeHead(404, { "content-type": "application/json" });
           res.end(JSON.stringify({ detail: "Not Found" }));
+          return;
+        }
+        if (route.sse) {
+          res.writeHead(route.status ?? 200, {
+            "content-type": "text/event-stream",
+            "cache-control": "no-cache",
+          });
+          for (const event of route.sse) {
+            res.write(`data: ${JSON.stringify(event)}\n\n`);
+          }
+          res.end();
           return;
         }
         res.writeHead(route.status ?? 200, { "content-type": "application/json" });
