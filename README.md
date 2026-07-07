@@ -8,10 +8,12 @@
 ## 快速开始
 
 ```bash
-cp .env.example .env   # 填写 OS_SECURITY_KEY（必填）与 OPENAI_API_KEY
+cp .env.example .env   # 必填：OS_SECURITY_KEY / AUTH_SECRET / ENCRYPTION_KEY（强随机）+ OPENAI_API_KEY
 docker compose up -d   # postgres + runtime + console
-open http://localhost:3000
+open http://localhost:3000   # 第一个注册的账号自动成为 Admin
 ```
+
+完整部署步骤与**安全红线清单**见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)。
 
 ## 本地开发
 
