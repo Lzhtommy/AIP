@@ -8,6 +8,19 @@ import { users } from "@/db/schema";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
+  callbacks: {
+    ...authConfig.callbacks,
+    // 角色每次请求从数据库刷新：Admin 调整角色即时生效，无需重新登录
+    async session({ session, token }) {
+      session.user.id = token.userId as string;
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, token.userId as string),
+        columns: { role: true },
+      });
+      session.user.role = user?.role ?? "member";
+      return session;
+    },
+  },
   providers: [
     Credentials({
       credentials: { email: {}, password: {} },

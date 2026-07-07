@@ -26,12 +26,23 @@ export default function SessionsPage() {
   const [rows, setRows] = useState<SessionRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userFilter, setUserFilter] = useState("");
 
-  const load = useCallback(async (k: Kind) => {
+  useEffect(() => {
+    fetch("/api/auth/session")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => setIsAdmin(s?.user?.role === "admin"))
+      .catch(() => {});
+  }, []);
+
+  const load = useCallback(async (k: Kind, user?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/os/sessions?kind=${k}`);
+      const qs = new URLSearchParams({ kind: k });
+      if (user) qs.set("user", user);
+      const res = await fetch(`/api/os/sessions?${qs.toString()}`);
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         throw new Error(body?.error?.message ?? "无法获取会话列表");
@@ -46,8 +57,18 @@ export default function SessionsPage() {
   }, []);
 
   useEffect(() => {
-    void load(kind);
-  }, [kind, load]);
+    void load(kind, userFilter || undefined);
+  }, [kind, userFilter, load]);
+
+  async function onDelete(row: SessionRow, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm(`确认删除会话「${row.name ?? row.sessionId}」？此操作不可恢复。`)) return;
+    await fetch(`/api/os/sessions/${encodeURIComponent(row.sessionId)}?kind=${kind}`, {
+      method: "DELETE",
+    });
+    await load(kind, userFilter || undefined);
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -75,6 +96,16 @@ export default function SessionsPage() {
         ))}
       </div>
 
+      {isAdmin && (
+        <input
+          value={userFilter}
+          onChange={(e) => setUserFilter(e.target.value)}
+          placeholder="按用户 ID 过滤（Admin）"
+          aria-label="按用户过滤"
+          className="w-72 rounded-md border border-input bg-transparent px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+        />
+      )}
+
       {error && <p className="text-sm text-destructive">{error}</p>}
       {!error && loading && <p className="text-sm text-muted-foreground">加载中…</p>}
       {!error && !loading && rows.length === 0 && (
@@ -97,9 +128,19 @@ export default function SessionsPage() {
                 {row.updatedAt ? new Date(row.updatedAt).toLocaleString() : ""}
               </span>
             </div>
-            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-              {row.targetId && <Badge variant="outline">{row.targetId}</Badge>}
-              {row.userId && <span className="truncate">用户：{row.userId}</span>}
+            <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <div className="flex min-w-0 items-center gap-2">
+                {row.targetId && <Badge variant="outline">{row.targetId}</Badge>}
+                {row.userId && <span className="truncate">用户：{row.userId}</span>}
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={(e) => onDelete(row, e)}
+                  className="shrink-0 text-destructive hover:underline"
+                >
+                  删除
+                </button>
+              )}
             </div>
           </Link>
         ))}

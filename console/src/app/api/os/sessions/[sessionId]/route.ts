@@ -9,6 +9,42 @@ const NOT_FOUND = () =>
     { status: 404 },
   );
 
+/** 删除会话（仅 Admin 的破坏性操作） */
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ sessionId: string }> },
+) {
+  const ctx = await withOsContext();
+  if (ctx instanceof NextResponse) return ctx;
+  if (ctx.role !== "admin") {
+    return NextResponse.json(
+      { error: { code: "FORBIDDEN", message: "仅管理员可删除会话" } },
+      { status: 403 },
+    );
+  }
+
+  const { sessionId } = await params;
+  const url = new URL(request.url);
+  const kind = url.searchParams.get("kind") ?? "agents";
+  if (!isOsKind(kind)) return NOT_FOUND();
+
+  try {
+    const res = await fetch(
+      `${ctx.endpoint.baseUrl}/sessions/${encodeURIComponent(sessionId)}?type=${KIND_TO_TYPE[kind as OsKind]}`,
+      {
+        method: "DELETE",
+        headers: osHeaders(ctx.endpoint),
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    if (res.status === 404) return NOT_FOUND();
+    if (!res.ok && res.status !== 204) return UNREACHABLE();
+    return NextResponse.json({ ok: true });
+  } catch {
+    return UNREACHABLE();
+  }
+}
+
 /** 会话详情 + 回放消息。Member 只能访问自己的会话（越权一律 404，不暴露存在性）。 */
 export async function GET(
   request: Request,

@@ -53,17 +53,30 @@ export function Sidebar({
           系统状态
         </Link>
         {isAdmin && (
-          <Link
-            href="/settings/endpoints"
-            className={cn(
-              "block rounded-md px-3 py-2 text-sm transition-colors",
-              pathname.startsWith("/settings/endpoints")
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-            )}
-          >
-            端点设置
-          </Link>
+          <>
+            <Link
+              href="/settings/endpoints"
+              className={cn(
+                "block rounded-md px-3 py-2 text-sm transition-colors",
+                pathname.startsWith("/settings/endpoints")
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              )}
+            >
+              端点设置
+            </Link>
+            <Link
+              href="/settings/users"
+              className={cn(
+                "block rounded-md px-3 py-2 text-sm transition-colors",
+                pathname.startsWith("/settings/users")
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              )}
+            >
+              用户管理
+            </Link>
+          </>
         )}
       </div>
       {userMenu}
