@@ -17,27 +17,73 @@ import {
 import { parseSseStream } from "@/lib/chat/sse";
 import { cn } from "@/lib/utils";
 
-interface AgentItem {
+type TargetKind = "agents" | "teams" | "workflows";
+
+interface TargetItem {
+  kind: TargetKind;
   id: string;
   name: string;
+  description?: string;
   model?: { provider?: string; model?: string };
 }
+
+const KIND_LABEL: Record<TargetKind, string> = {
+  agents: "Agents",
+  teams: "Teams",
+  workflows: "Workflows",
+};
 
 function AssistantParts({ message }: { message: ChatMessage }) {
   return (
     <>
-      {message.parts.map((p, i) =>
-        p.type === "text" ? (
-          <div
-            key={i}
-            className="prose prose-sm prose-invert max-w-none [&_pre]:overflow-x-auto"
-          >
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{p.text}</ReactMarkdown>
-          </div>
-        ) : (
-          <ToolCallCard key={p.id + i} part={p} />
-        ),
-      )}
+      {message.parts.map((p, i) => {
+        switch (p.type) {
+          case "text":
+            return (
+              <div
+                key={i}
+                className="prose prose-sm prose-invert max-w-none [&_pre]:overflow-x-auto"
+              >
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{p.text}</ReactMarkdown>
+              </div>
+            );
+          case "tool":
+            return <ToolCallCard key={p.id + i} part={p} />;
+          case "member":
+            return (
+              <div
+                key={i}
+                className="mt-2 flex items-center gap-1 text-xs text-muted-foreground"
+                data-testid="member-marker"
+              >
+                <span>👤</span>
+                <span className="font-medium">{p.name}</span>
+              </div>
+            );
+          case "step":
+            return (
+              <div
+                key={i}
+                className="my-2 flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
+                data-testid="step-marker"
+              >
+                <span className="text-muted-foreground">▸</span>
+                <span>{p.name}</span>
+                <Badge
+                  variant={
+                    p.status === "running"
+                      ? "outline"
+                      : p.status === "done"
+                        ? "secondary"
+                        : "destructive"
+                  }
+                >
+                  {p.status === "running" ? "进行中…" : p.status === "done" ? "完成" : "失败"}
+                </Badge>
+              </div>
+            );
+        }
+      })}
       {message.parts.length === 0 && <span>…</span>}
       {message.interrupted && (
         <p className="mt-1 text-xs text-muted-foreground">（已中断）</p>
@@ -47,8 +93,8 @@ function AssistantParts({ message }: { message: ChatMessage }) {
 }
 
 export default function ChatPage() {
-  const [agents, setAgents] = useState<AgentItem[]>([]);
-  const [agentId, setAgentId] = useState<string | null>(null);
+  const [targets, setTargets] = useState<TargetItem[]>([]);
+  const [target, setTarget] = useState<TargetItem | null>(null);
   const [chat, setChat] = useState<ChatState>(initialChatState);
   const [input, setInput] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -58,19 +104,27 @@ export default function ChatPage() {
   const genRef = useRef(0);
 
   useEffect(() => {
-    fetch("/api/os/agents")
-      .then(async (res) => {
-        if (!res.ok) {
-          const body = await res.json().catch(() => null);
-          throw new Error(body?.error?.message ?? "无法获取 Agent 列表");
-        }
-        return res.json();
-      })
-      .then((list: AgentItem[]) => {
-        setAgents(list);
-        setAgentId((prev) => prev ?? list[0]?.id ?? null);
-      })
-      .catch((e: Error) => setLoadError(e.message));
+    async function loadAll() {
+      const kinds: TargetKind[] = ["agents", "teams", "workflows"];
+      const results = await Promise.all(
+        kinds.map(async (kind) => {
+          const res = await fetch(`/api/os/${kind}`);
+          if (!res.ok) {
+            if (kind === "agents") {
+              const body = await res.json().catch(() => null);
+              throw new Error(body?.error?.message ?? "无法获取运行目标列表");
+            }
+            return [] as TargetItem[];
+          }
+          const list = (await res.json()) as Omit<TargetItem, "kind">[];
+          return list.map((item) => ({ ...item, kind }));
+        }),
+      );
+      const flat = results.flat();
+      setTargets(flat);
+      setTarget((prev) => prev ?? flat[0] ?? null);
+    }
+    loadAll().catch((e: Error) => setLoadError(e.message));
   }, []);
 
   useEffect(() => {
@@ -78,7 +132,7 @@ export default function ChatPage() {
   }, [chat.messages]);
 
   async function run(message: string) {
-    if (!agentId) return;
+    if (!target) return;
     const gen = genRef.current;
     const commit = (s: ChatState) => {
       if (genRef.current === gen) setChat(s);
@@ -90,7 +144,7 @@ export default function ChatPage() {
     abortRef.current = controller;
     try {
       const res = await fetch(
-        `/api/os/agents/${encodeURIComponent(agentId)}/runs`,
+        `/api/os/${target.kind}/${encodeURIComponent(target.id)}/runs`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -149,40 +203,52 @@ export default function ChatPage() {
     setChat(initialChatState);
   }
 
-  const currentAgent = agents.find((a) => a.id === agentId);
+  
   const streaming = chat.status === "streaming";
 
   return (
     <div className="flex h-full gap-6">
-      <aside className="w-56 shrink-0 space-y-1">
-        <h2 className="mb-2 text-sm font-medium text-muted-foreground">Agents</h2>
+      <aside className="w-56 shrink-0 space-y-4 overflow-y-auto">
         {loadError && <p className="text-sm text-destructive">{loadError}</p>}
-        {agents.map((a) => (
-          <button
-            key={a.id}
-            onClick={() => {
-              setAgentId(a.id);
-              newSession();
-            }}
-            className={cn(
-              "w-full rounded-md px-3 py-2 text-left text-sm transition-colors",
-              a.id === agentId
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent/50",
-            )}
-          >
-            <div className="font-medium">{a.name}</div>
-            {a.model?.model && (
-              <div className="text-xs text-muted-foreground">{a.model.model}</div>
-            )}
-          </button>
-        ))}
+        {(["agents", "teams", "workflows"] as TargetKind[]).map((kind) => {
+          const group = targets.filter((t) => t.kind === kind);
+          if (group.length === 0) return null;
+          return (
+            <div key={kind} className="space-y-1">
+              <h2 className="mb-1 text-sm font-medium text-muted-foreground">
+                {KIND_LABEL[kind]}
+              </h2>
+              {group.map((t) => (
+                <button
+                  key={t.kind + t.id}
+                  onClick={() => {
+                    setTarget(t);
+                    newSession();
+                  }}
+                  className={cn(
+                    "w-full rounded-md px-3 py-2 text-left text-sm transition-colors",
+                    target?.kind === t.kind && target?.id === t.id
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent/50",
+                  )}
+                >
+                  <div className="font-medium">{t.name}</div>
+                  {(t.model?.model ?? t.description) && (
+                    <div className="truncate text-xs text-muted-foreground">
+                      {t.model?.model ?? t.description}
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          );
+        })}
       </aside>
 
       <section className="flex min-w-0 flex-1 flex-col">
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold">{currentAgent?.name ?? "Chat"}</h1>
+            <h1 className="text-lg font-semibold">{target?.name ?? "Chat"}</h1>
             {chat.sessionId && <Badge variant="outline">会话中</Badge>}
           </div>
           <Button variant="outline" size="sm" onClick={newSession}>
@@ -243,8 +309,8 @@ export default function ChatPage() {
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={agentId ? "输入消息…" : "暂无可用 Agent"}
-            disabled={!agentId || streaming}
+            placeholder={target ? "输入消息…" : "暂无可用运行目标"}
+            disabled={!target || streaming}
             aria-label="消息输入"
             className="flex-1 rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
@@ -253,7 +319,7 @@ export default function ChatPage() {
               停止
             </Button>
           ) : (
-            <Button type="submit" disabled={!agentId}>
+            <Button type="submit" disabled={!target}>
               发送
             </Button>
           )}

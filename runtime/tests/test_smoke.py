@@ -21,6 +21,14 @@ def test_health_endpoint_returns_status():
     assert "status" in body
 
 
+def test_teams_and_workflows_registered():
+    with TestClient(app) as client:
+        teams = client.get("/teams").json()
+        workflows = client.get("/workflows").json()
+    assert [t["id"] for t in teams] == ["demo-team"]
+    assert [w["id"] for w in workflows] == ["demo-workflow"]
+
+
 @pytest.mark.skipif(
     not os.getenv("OPENAI_API_KEY"),
     reason="需要 OPENAI_API_KEY 才能真实调用模型",

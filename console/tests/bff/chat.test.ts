@@ -34,7 +34,20 @@ describe("Chat BFF 代理", () => {
           },
         ],
       })
-      .on("/agents/demo-assistant/runs", { sse: RUN_EVENTS });
+      .on("/agents/demo-assistant/runs", { sse: RUN_EVENTS })
+      .on("/teams", {
+        body: [{ id: "demo-team", name: "Demo Team", internal: "hidden" }],
+      })
+      .on("/workflows", {
+        body: [{ id: "demo-wf", name: "Demo Workflow", description: "演示流程" }],
+      })
+      .on("/teams/demo-team/runs", {
+        sse: [
+          { event: "TeamRunStarted", session_id: "t-sess" },
+          { event: "TeamRunContent", content: "team ok" },
+          { event: "TeamRunCompleted" },
+        ],
+      });
     await stub.start();
     server = await startConsole(
       consoleEnv({ OS_ENDPOINT_URL: stub.url, OS_SECURITY_KEY: KEY }),
@@ -85,6 +98,38 @@ describe("Chat BFF 代理", () => {
       "RunContent",
       "RunCompleted",
     ]);
+  });
+
+  it("teams / workflows 列表同样精简代理，未知类型 404", async () => {
+    const teams = await fetch(`${server.baseUrl}/api/os/teams`, {
+      headers: { cookie },
+    });
+    expect(await teams.json()).toEqual([
+      { id: "demo-team", name: "Demo Team" },
+    ]);
+
+    const workflows = await fetch(`${server.baseUrl}/api/os/workflows`, {
+      headers: { cookie },
+    });
+    expect(await workflows.json()).toEqual([
+      { id: "demo-wf", name: "Demo Workflow", description: "演示流程" },
+    ]);
+
+    const unknown = await fetch(`${server.baseUrl}/api/os/hackers`, {
+      headers: { cookie },
+    });
+    expect(unknown.status).toBe(404);
+  });
+
+  it("Team 流式 run 同样透传 SSE", async () => {
+    const res = await fetch(`${server.baseUrl}/api/os/teams/demo-team/runs`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ message: "开工" }),
+    });
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain("TeamRunContent");
   });
 
   it("user_id 由服务端强制注入，客户端伪造无效", async () => {

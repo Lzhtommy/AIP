@@ -1,17 +1,25 @@
 import { NextResponse } from "next/server";
+import { isOsKind } from "@/lib/os-kinds";
 import { osHeaders, UNREACHABLE, withOsContext } from "@/lib/os-proxy";
 
 /**
- * 流式运行 Agent：把 runtime 的 SSE 原样透传给浏览器。
+ * 流式运行 Agent/Team/Workflow：把 runtime 的 SSE 原样透传给浏览器。
  * user_id 由服务端强制注入为控制台登录用户，客户端传入的任何值都被忽略（会话隔离契约）。
  */
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ agentId: string }> },
+  { params }: { params: Promise<{ kind: string; itemId: string }> },
 ) {
+  const { kind, itemId } = await params;
+  if (!isOsKind(kind)) {
+    return NextResponse.json(
+      { error: { code: "UNKNOWN_KIND", message: "未知的资源类型" } },
+      { status: 404 },
+    );
+  }
+
   const ctx = await withOsContext();
   if (ctx instanceof NextResponse) return ctx;
-  const { agentId } = await params;
 
   const payload = await request.json().catch(() => null);
   const message = String(payload?.message ?? "").trim();
@@ -33,7 +41,7 @@ export async function POST(
   let upstream: Response;
   try {
     upstream = await fetch(
-      `${ctx.endpoint.baseUrl}/agents/${encodeURIComponent(agentId)}/runs`,
+      `${ctx.endpoint.baseUrl}/${kind}/${encodeURIComponent(itemId)}/runs`,
       {
         method: "POST",
         headers: osHeaders(ctx.endpoint),

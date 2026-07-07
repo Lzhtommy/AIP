@@ -13,7 +13,10 @@ from agno.agent import Agent
 from agno.db.postgres import PostgresDb
 from agno.models.openai import OpenAIChat
 from agno.os import AgentOS
+from agno.team import Team
 from agno.tools.calculator import CalculatorTools
+from agno.workflow.step import Step
+from agno.workflow.workflow import Workflow
 
 db = PostgresDb(
     db_url=os.getenv(
@@ -33,10 +36,40 @@ demo_agent = Agent(
     instructions="你是 AIP 平台的演示助手。涉及计算时使用计算器工具。",
 )
 
+writer_agent = Agent(
+    id="writer",
+    name="Writer Agent",
+    model=OpenAIChat(id=os.getenv("DEMO_MODEL_ID", "gpt-4.1-mini")),
+    db=db,
+    role="把要点整理成简洁的中文说明",
+    markdown=True,
+)
+
+demo_team = Team(
+    id="demo-team",
+    name="Demo Team",
+    members=[demo_agent, writer_agent],
+    db=db,
+    instructions="先用计算/推理得到要点，再由 Writer 整理成中文结论。",
+)
+
+demo_workflow = Workflow(
+    id="demo-workflow",
+    name="Demo Workflow",
+    description="两步演示流程：计算 → 撰写",
+    db=db,
+    steps=[
+        Step(name="计算", agent=demo_agent),
+        Step(name="撰写", agent=writer_agent),
+    ],
+)
+
 agent_os = AgentOS(
     id="aip-demo-os",
     description="AIP 内部平台演示 AgentOS",
-    agents=[demo_agent],
+    agents=[demo_agent, writer_agent],
+    teams=[demo_team],
+    workflows=[demo_workflow],
     db=db,
 )
 

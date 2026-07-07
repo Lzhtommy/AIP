@@ -53,6 +53,34 @@ test("停止按钮立即中断流式输出", async ({ page }) => {
   await expect(list.getByText("第10段。")).toHaveCount(0);
 });
 
+test("Team 对话可见成员分工与团队汇总", async ({ page }) => {
+  await page.goto("/chat");
+  await page.getByRole("button", { name: "Demo Team" }).click();
+  await page.getByLabel("消息输入").fill("分头研究");
+  await page.getByRole("button", { name: "发送" }).click();
+
+  const list = page.getByTestId("message-list");
+  await expect(list.getByTestId("member-marker")).toHaveCount(2);
+  await expect(list.getByText("Demo Assistant")).toBeVisible();
+  await expect(list.getByText("Writer Agent")).toBeVisible();
+  await expect(list.locator("strong", { hasText: "团队汇总" })).toBeVisible();
+});
+
+test("Workflow 触发后流式显示步骤进展", async ({ page }) => {
+  await page.goto("/chat");
+  await page.getByRole("button", { name: "Demo Workflow" }).click();
+  await page.getByLabel("消息输入").fill("跑流程");
+  await page.getByRole("button", { name: "发送" }).click();
+
+  const list = page.getByTestId("message-list");
+  await expect(list.getByTestId("step-marker")).toHaveCount(2);
+  await expect(list.getByText("计算")).toBeVisible();
+  await expect(list.getByText("撰写")).toBeVisible();
+  await expect(list.getByText("流程产出文本。")).toBeVisible();
+  // 两个步骤最终都为完成态
+  await expect(list.getByTestId("step-marker").getByText("完成")).toHaveCount(2);
+});
+
 test("新会话清空消息", async ({ page }) => {
   await page.goto("/chat");
   await page.getByLabel("消息输入").fill("第一条");

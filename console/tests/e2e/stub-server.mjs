@@ -41,6 +41,29 @@ const SLOW_EVENTS = [
   { event: "RunCompleted" },
 ];
 
+const TEAMS = [{ id: "demo-team", name: "Demo Team" }];
+const WORKFLOWS = [
+  { id: "demo-workflow", name: "Demo Workflow", description: "两步演示流程" },
+];
+
+const TEAM_EVENTS = [
+  { event: "TeamRunStarted", run_id: "team-run", session_id: "team-sess" },
+  { event: "RunContent", content: "算得 10001。", agent_id: "demo-assistant", agent_name: "Demo Assistant" },
+  { event: "RunContent", content: "结论已整理。", agent_id: "writer", agent_name: "Writer Agent" },
+  { event: "TeamRunContent", content: "**团队汇总**：完成。" },
+  { event: "TeamRunCompleted" },
+];
+
+const WORKFLOW_EVENTS = [
+  { event: "WorkflowStarted", run_id: "wf-run", session_id: "wf-sess" },
+  { event: "StepStarted", step_name: "计算" },
+  { event: "StepCompleted", step_name: "计算" },
+  { event: "StepStarted", step_name: "撰写" },
+  { event: "RunContent", content: "流程产出文本。" },
+  { event: "StepCompleted", step_name: "撰写" },
+  { event: "WorkflowCompleted" },
+];
+
 createServer((req, res) => {
   const url = req.url ?? "";
   if (url === "/health") {
@@ -53,9 +76,27 @@ createServer((req, res) => {
     res.end(JSON.stringify(AGENTS));
     return;
   }
-  const runMatch = url.match(/^\/agents\/(demo-assistant|slow-agent)\/runs$/);
+  if (url === "/teams") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(TEAMS));
+    return;
+  }
+  if (url === "/workflows") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(WORKFLOWS));
+    return;
+  }
+  const runMatch = url.match(
+    /^\/(?:agents\/(demo-assistant|slow-agent)|teams\/demo-team|workflows\/demo-workflow)\/runs$/,
+  );
   if (runMatch && req.method === "POST") {
-    const events = runMatch[1] === "slow-agent" ? SLOW_EVENTS : RUN_EVENTS;
+    const events = url.startsWith("/teams/")
+      ? TEAM_EVENTS
+      : url.startsWith("/workflows/")
+        ? WORKFLOW_EVENTS
+        : runMatch[1] === "slow-agent"
+          ? SLOW_EVENTS
+          : RUN_EVENTS;
     const interval = runMatch[1] === "slow-agent" ? 250 : 120;
     req.resume(); // 丢弃请求体
     req.on("end", () => {

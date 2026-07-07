@@ -45,6 +45,22 @@ describe("Agno runtime 契约", () => {
     }
   });
 
+  it("/teams 与 /workflows 返回 id/name 形状", async ({ skip }) => {
+    if (!reachable) return skip();
+    for (const kind of ["teams", "workflows"]) {
+      const res = await fetch(`${RUNTIME_URL}/${kind}`, {
+        headers: { authorization: `Bearer ${RUNTIME_KEY}` },
+      });
+      expect(res.status).toBe(200);
+      const list = await res.json();
+      expect(Array.isArray(list)).toBe(true);
+      for (const item of list) {
+        expect(typeof item.id).toBe("string");
+        expect(typeof item.name).toBe("string");
+      }
+    }
+  });
+
   it("未带密钥访问 /agents 被拒绝（401/403）", async ({ skip }) => {
     if (!reachable) return skip();
     const res = await fetch(`${RUNTIME_URL}/agents`);
