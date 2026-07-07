@@ -3,7 +3,7 @@
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,6 +13,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+const OAUTH_LABEL: Record<string, string> = {
+  google: "使用 Google 登录",
+  github: "使用 GitHub 登录",
+};
+
 function LoginForm() {
   const search = useSearchParams();
   const callbackUrl = search.get("callbackUrl") ?? "/";
@@ -20,6 +25,18 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [oauthProviders, setOauthProviders] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch("/api/auth/providers")
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((providers: Record<string, { id: string }>) => {
+        setOauthProviders(
+          Object.keys(providers).filter((id) => id in OAUTH_LABEL),
+        );
+      })
+      .catch(() => {});
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -83,6 +100,21 @@ function LoginForm() {
             </Link>
           </p>
         </form>
+        {oauthProviders.length > 0 && (
+          <div className="mt-4 space-y-2 border-t border-border pt-4">
+            {oauthProviders.map((id) => (
+              <Button
+                key={id}
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => signIn(id, { callbackUrl })}
+              >
+                {OAUTH_LABEL[id]}
+              </Button>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
