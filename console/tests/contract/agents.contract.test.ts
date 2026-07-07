@@ -61,6 +61,17 @@ describe("Agno runtime 契约", () => {
     }
   });
 
+  it("/traces 返回 {data, meta} 分页形状", async ({ skip }) => {
+    if (!reachable) return skip();
+    const res = await fetch(`${RUNTIME_URL}/traces?limit=1`, {
+      headers: { authorization: `Bearer ${RUNTIME_KEY}` },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.meta).toHaveProperty("total_count");
+  });
+
   it("未带密钥访问 /agents 被拒绝（401/403）", async ({ skip }) => {
     if (!reachable) return skip();
     const res = await fetch(`${RUNTIME_URL}/agents`);

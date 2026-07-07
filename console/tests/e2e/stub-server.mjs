@@ -2,7 +2,8 @@
 import { createServer } from "node:http";
 
 const port = Number(process.env.STUB_PORT ?? 45678);
-let lastSeenUserId = null;
+let lastSessionUserId = null;
+let lastTraceUserId = null;
 
 const AGENTS = [
   {
@@ -106,8 +107,67 @@ const SESSION_RUNS = [
   },
 ];
 
+const TRACE_SUMMARY = {
+  trace_id: "tr-e2e",
+  name: "Demo Assistant.run",
+  status: "error",
+  duration: 1234,
+  total_spans: 3,
+  error_count: 1,
+  session_id: "sess-e2e",
+  agent_id: "demo-assistant",
+  created_at: "2026-07-07T10:00:00Z",
+};
+
+const TRACE_TREE = {
+  id: "n-root",
+  name: "Demo Assistant.run",
+  type: "agent_run",
+  duration: 1234,
+  status: "error",
+  spans: [
+    {
+      id: "n-llm",
+      name: "OpenAIChat.invoke",
+      type: "model_call",
+      duration: 900,
+      status: "ok",
+      metadata: { input_tokens: 120, output_tokens: 45 },
+      spans: [],
+    },
+    {
+      id: "n-tool",
+      name: "multiply",
+      type: "tool_call",
+      duration: 30,
+      status: "error",
+      error: "boom: 演示错误",
+      spans: [],
+    },
+  ],
+};
+
 createServer((req, res) => {
   const url = req.url ?? "";
+  if (url.startsWith("/traces/tr-e2e")) {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({ ...TRACE_SUMMARY, user_id: lastTraceUserId ?? "any", tree: TRACE_TREE }),
+    );
+    return;
+  }
+  if (url.startsWith("/traces")) {
+    const userId = new URL(url, "http://x").searchParams.get("user_id");
+    if (userId) lastTraceUserId = userId;
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        data: [{ ...TRACE_SUMMARY, user_id: userId ?? "any" }],
+        meta: { page: 1, limit: 20, total_pages: 1, total_count: 1 },
+      }),
+    );
+    return;
+  }
   // sessions：列表按请求的 user_id 回显归属，详情同理（stub 无状态）
   if (url.startsWith("/sessions/sess-e2e/runs")) {
     res.writeHead(200, { "content-type": "application/json" });
@@ -118,12 +178,12 @@ createServer((req, res) => {
     const userId = new URL(url, "http://x").searchParams.get("user_id");
     // 详情不带 user_id 参数——回显列表请求最近一次见到的 user_id
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify(sessionDetail(lastSeenUserId ?? userId ?? "any")));
+    res.end(JSON.stringify(sessionDetail(lastSessionUserId ?? userId ?? "any")));
     return;
   }
   if (url.startsWith("/sessions")) {
     const userId = new URL(url, "http://x").searchParams.get("user_id");
-    if (userId) lastSeenUserId = userId;
+    if (userId) lastSessionUserId = userId;
     const data = SESSION_LIST.data.map((s) => ({ ...s, user_id: userId ?? s.user_id }));
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ ...SESSION_LIST, data }));
