@@ -7,6 +7,7 @@ export function consoleEnv(extra: Record<string, string> = {}) {
     DATABASE_URL: TEST_DATABASE_URL,
     AUTH_SECRET: "vitest-auth-secret",
     AUTH_TRUST_HOST: "true",
+    ENCRYPTION_KEY: "vitest-encryption-key",
     ...extra,
   };
 }

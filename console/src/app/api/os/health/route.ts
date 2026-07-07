@@ -1,26 +1,44 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { resolveCurrentEndpoint } from "@/lib/endpoints";
 
 export async function GET() {
-  const endpoint = process.env.OS_ENDPOINT_URL;
-  if (!endpoint) {
+  const session = await auth();
+  if (!session?.user) {
     return NextResponse.json(
-      { status: "unconfigured" },
-      { status: 500 },
+      { error: { code: "UNAUTHENTICATED", message: "请先登录" } },
+      { status: 401 },
     );
   }
-  const key = process.env.OS_SECURITY_KEY;
+
+  const endpoint = await resolveCurrentEndpoint(session.user.id);
+  if (!endpoint) {
+    return NextResponse.json(
+      {
+        status: "unconfigured",
+        error: { code: "NO_ENDPOINT", message: "尚未配置任何 runtime 端点，请联系管理员" },
+      },
+      { status: 503 },
+    );
+  }
+
   try {
-    const res = await fetch(`${endpoint}/health`, {
+    const res = await fetch(`${endpoint.baseUrl}/health`, {
       cache: "no-store",
-      headers: key ? { authorization: `Bearer ${key}` } : undefined,
+      headers: { authorization: `Bearer ${endpoint.securityKey}` },
       signal: AbortSignal.timeout(5_000),
     });
     const data = await res.json();
-    return NextResponse.json({ status: data.status, runtime: data });
+    return NextResponse.json({
+      status: data.status,
+      runtime: data,
+      endpoint: { id: endpoint.id, name: endpoint.name },
+    });
   } catch {
     return NextResponse.json(
       {
         status: "unreachable",
+        endpoint: { id: endpoint.id, name: endpoint.name },
         error: {
           code: "ENDPOINT_UNREACHABLE",
           message: "无法连接当前 runtime 端点，请联系管理员检查端点配置",

@@ -32,6 +32,7 @@ export default defineConfig({
           "postgresql://ai:ai@localhost:5532/console",
         AUTH_SECRET: "e2e-auth-secret",
         AUTH_TRUST_HOST: "true",
+        ENCRYPTION_KEY: "e2e-encryption-key",
       },
     },
   ],

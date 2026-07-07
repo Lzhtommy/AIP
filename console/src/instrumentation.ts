@@ -11,4 +11,7 @@ export async function register() {
   const client = postgres(url, { max: 1 });
   await migrate(drizzle(client), { migrationsFolder: "./drizzle" });
   await client.end();
+
+  const { seedEndpointFromEnv } = await import("@/lib/endpoints");
+  await seedEndpointFromEnv();
 }

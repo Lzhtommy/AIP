@@ -38,3 +38,10 @@ test("状态页显示 runtime 运行正常与版本", async ({ page }) => {
   await expect(page.getByText("运行正常")).toBeVisible();
   await expect(page.getByText("e2e-stub")).toBeVisible();
 });
+
+test("侧边栏显示端点切换器与种子端点", async ({ page }) => {
+  await page.goto("/");
+  const switcher = page.getByLabel("当前端点");
+  await expect(switcher).toBeVisible();
+  await expect(switcher).toContainText("默认 Runtime");
+});
