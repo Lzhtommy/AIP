@@ -3,12 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ToolCallCard } from "@/components/tool-call-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   initialChatState,
+  messageText,
   reduceChatEvent,
   startUserTurn,
+  type ChatMessage,
   type ChatState,
 } from "@/lib/chat/reducer";
 import { parseSseStream } from "@/lib/chat/sse";
@@ -20,6 +23,29 @@ interface AgentItem {
   model?: { provider?: string; model?: string };
 }
 
+function AssistantParts({ message }: { message: ChatMessage }) {
+  return (
+    <>
+      {message.parts.map((p, i) =>
+        p.type === "text" ? (
+          <div
+            key={i}
+            className="prose prose-sm prose-invert max-w-none [&_pre]:overflow-x-auto"
+          >
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{p.text}</ReactMarkdown>
+          </div>
+        ) : (
+          <ToolCallCard key={p.id + i} part={p} />
+        ),
+      )}
+      {message.parts.length === 0 && <span>…</span>}
+      {message.interrupted && (
+        <p className="mt-1 text-xs text-muted-foreground">（已中断）</p>
+      )}
+    </>
+  );
+}
+
 export default function ChatPage() {
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [agentId, setAgentId] = useState<string | null>(null);
@@ -27,6 +53,9 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  // 代际计数：新会话/切换 Agent 后，旧流的迟到更新一律丢弃
+  const genRef = useRef(0);
 
   useEffect(() => {
     fetch("/api/os/agents")
@@ -48,13 +77,17 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat.messages]);
 
-  async function send() {
-    const message = input.trim();
-    if (!message || !agentId || chat.status === "streaming") return;
-    setInput("");
+  async function run(message: string) {
+    if (!agentId) return;
+    const gen = genRef.current;
+    const commit = (s: ChatState) => {
+      if (genRef.current === gen) setChat(s);
+    };
     let state = startUserTurn(chat, message);
-    setChat(state);
+    commit(state);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const res = await fetch(
         `/api/os/agents/${encodeURIComponent(agentId)}/runs`,
@@ -62,6 +95,7 @@ export default function ChatPage() {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ message, sessionId: state.sessionId }),
+          signal: controller.signal,
         },
       );
       if (!res.ok || !res.body) {
@@ -70,29 +104,53 @@ export default function ChatPage() {
           event: "RunError",
           content: body?.error?.message ?? `请求失败（${res.status}）`,
         });
-        setChat(state);
+        commit(state);
         return;
       }
       for await (const event of parseSseStream(res.body)) {
         state = reduceChatEvent(state, event);
-        setChat(state);
+        commit(state);
       }
-      // 流正常结束但没收到 RunCompleted 时兜底收尾
       if (state.status === "streaming") {
         state = reduceChatEvent(state, { event: "RunCompleted" });
-        setChat(state);
+        commit(state);
       }
-    } catch {
-      state = reduceChatEvent(state, { event: "RunError", content: "连接中断" });
-      setChat(state);
+    } catch (err) {
+      const aborted = err instanceof DOMException && err.name === "AbortError";
+      state = reduceChatEvent(
+        state,
+        aborted ? { event: "__aborted" } : { event: "RunError", content: "连接中断" },
+      );
+      commit(state);
+    } finally {
+      abortRef.current = null;
     }
   }
 
+  function send() {
+    const message = input.trim();
+    if (!message || chat.status === "streaming") return;
+    setInput("");
+    void run(message);
+  }
+
+  function stop() {
+    abortRef.current?.abort();
+  }
+
+  function retry() {
+    const lastUser = chat.messages.filter((m) => m.role === "user").at(-1);
+    if (lastUser) void run(messageText(lastUser));
+  }
+
   function newSession() {
+    genRef.current++;
+    abortRef.current?.abort();
     setChat(initialChatState);
   }
 
   const currentAgent = agents.find((a) => a.id === agentId);
+  const streaming = chat.status === "streaming";
 
   return (
     <div className="flex h-full gap-6">
@@ -155,21 +213,22 @@ export default function ChatPage() {
                 )}
               >
                 {m.role === "assistant" ? (
-                  <div className="prose prose-sm prose-invert max-w-none [&_pre]:overflow-x-auto">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {m.text || "…"}
-                    </ReactMarkdown>
-                  </div>
+                  <AssistantParts message={m} />
                 ) : (
-                  m.text
+                  messageText(m)
                 )}
               </div>
             </div>
           ))}
           {chat.status === "error" && (
-            <p role="alert" className="text-sm text-destructive">
-              {chat.error}
-            </p>
+            <div className="flex items-center gap-3">
+              <p role="alert" className="text-sm text-destructive">
+                {chat.error}
+              </p>
+              <Button variant="outline" size="sm" onClick={retry}>
+                重试
+              </Button>
+            </div>
           )}
           <div ref={bottomRef} />
         </div>
@@ -178,20 +237,26 @@ export default function ChatPage() {
           className="mt-3 flex gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            void send();
+            send();
           }}
         >
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={agentId ? "输入消息…" : "暂无可用 Agent"}
-            disabled={!agentId || chat.status === "streaming"}
+            disabled={!agentId || streaming}
             aria-label="消息输入"
             className="flex-1 rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
-          <Button type="submit" disabled={!agentId || chat.status === "streaming"}>
-            {chat.status === "streaming" ? "生成中…" : "发送"}
-          </Button>
+          {streaming ? (
+            <Button type="button" variant="destructive" onClick={stop}>
+              停止
+            </Button>
+          ) : (
+            <Button type="submit" disabled={!agentId}>
+              发送
+            </Button>
+          )}
         </form>
       </section>
     </div>

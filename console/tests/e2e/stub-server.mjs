@@ -9,13 +9,36 @@ const AGENTS = [
     name: "Demo Assistant",
     model: { provider: "OpenAI", model: "gpt-4.1-mini" },
   },
+  {
+    id: "slow-agent",
+    name: "Slow Agent",
+    model: { provider: "OpenAI", model: "gpt-4.1-mini" },
+  },
 ];
 
 const RUN_EVENTS = [
   { event: "RunStarted", run_id: "run-e2e", session_id: "sess-e2e" },
+  {
+    event: "ToolCallStarted",
+    tool: { tool_call_id: "tc-e2e", tool_name: "multiply", tool_args: { a: 137, b: 73 } },
+  },
+  {
+    event: "ToolCallCompleted",
+    tool: { tool_call_id: "tc-e2e", tool_name: "multiply", result: "10001" },
+  },
   { event: "RunContent", content: "你好，" },
   { event: "RunContent", content: "这是 **e2e** 的流式回复。" },
   { event: "RunCompleted", content: "你好，这是 **e2e** 的流式回复。" },
+];
+
+// 慢速流：供「停止」按钮测试（20 段 × 250ms）
+const SLOW_EVENTS = [
+  { event: "RunStarted", run_id: "run-slow", session_id: "sess-slow" },
+  ...Array.from({ length: 20 }, (_, i) => ({
+    event: "RunContent",
+    content: `第${i + 1}段。`,
+  })),
+  { event: "RunCompleted" },
 ];
 
 createServer((req, res) => {
@@ -30,7 +53,10 @@ createServer((req, res) => {
     res.end(JSON.stringify(AGENTS));
     return;
   }
-  if (url === "/agents/demo-assistant/runs" && req.method === "POST") {
+  const runMatch = url.match(/^\/agents\/(demo-assistant|slow-agent)\/runs$/);
+  if (runMatch && req.method === "POST") {
+    const events = runMatch[1] === "slow-agent" ? SLOW_EVENTS : RUN_EVENTS;
+    const interval = runMatch[1] === "slow-agent" ? 250 : 120;
     req.resume(); // 丢弃请求体
     req.on("end", () => {
       res.writeHead(200, {
@@ -39,13 +65,14 @@ createServer((req, res) => {
       });
       let i = 0;
       const timer = setInterval(() => {
-        if (i >= RUN_EVENTS.length) {
+        if (i >= events.length) {
           clearInterval(timer);
           res.end();
           return;
         }
-        res.write(`data: ${JSON.stringify(RUN_EVENTS[i++])}\n\n`);
-      }, 120); // 模拟真实流式节奏
+        res.write(`data: ${JSON.stringify(events[i++])}\n\n`);
+      }, interval);
+      res.on("close", () => clearInterval(timer));
     });
     return;
   }

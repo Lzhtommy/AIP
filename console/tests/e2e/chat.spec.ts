@@ -21,6 +21,38 @@ test("发送消息后看到流式回复（Markdown 渲染）", async ({ page }) 
   await expect(page.getByText("会话中")).toBeVisible();
 });
 
+test("工具调用卡片实时出现，可展开查看入参与结果", async ({ page }) => {
+  await page.goto("/chat");
+  await page.getByLabel("消息输入").fill("算一下 137*73");
+  await page.getByRole("button", { name: "发送" }).click();
+
+  const card = page.getByTestId("tool-call-card");
+  await expect(card).toBeVisible();
+  await expect(card.getByText("multiply")).toBeVisible();
+  await expect(card.getByText("完成")).toBeVisible();
+
+  await card.locator("summary").click();
+  await expect(card.getByText('"a": 137')).toBeVisible();
+  await expect(card.getByText("10001")).toBeVisible();
+});
+
+test("停止按钮立即中断流式输出", async ({ page }) => {
+  await page.goto("/chat");
+  await page.getByRole("button", { name: "Slow Agent" }).click();
+  await page.getByLabel("消息输入").fill("开始长任务");
+  await page.getByRole("button", { name: "发送" }).click();
+
+  const list = page.getByTestId("message-list");
+  await expect(list.getByText("第1段。")).toBeVisible();
+  await page.getByRole("button", { name: "停止" }).click();
+
+  await expect(list.getByText("（已中断）")).toBeVisible();
+  await expect(page.getByRole("button", { name: "发送" })).toBeEnabled();
+  // 中断后不再继续输出
+  await page.waitForTimeout(600);
+  await expect(list.getByText("第10段。")).toHaveCount(0);
+});
+
 test("新会话清空消息", async ({ page }) => {
   await page.goto("/chat");
   await page.getByLabel("消息输入").fill("第一条");
