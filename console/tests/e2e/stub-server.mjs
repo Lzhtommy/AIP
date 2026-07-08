@@ -179,6 +179,27 @@ function memoryRow(userId) {
 
 createServer((req, res) => {
   const url = req.url ?? "";
+  if (url === "/knowledge/search" && req.method === "POST") {
+    req.resume();
+    req.on("end", () => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          data: [
+            {
+              id: "chunk-e2e",
+              content: "AIP 是内部私有化的 AgentOS 控制台。",
+              name: "产品手册",
+              content_id: "kc-e2e",
+              reranking_score: 0.91,
+            },
+          ],
+          meta: { page: 1, limit: 10, total_pages: 1, total_count: 1 },
+        }),
+      );
+    });
+    return;
+  }
   // knowledge：有状态 stub（添加/删除/状态）
   if (url.startsWith("/knowledge/content")) {
     const m = url.match(/^\/knowledge\/content\/([^/?]+)(\/status)?/);

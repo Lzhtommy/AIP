@@ -45,3 +45,14 @@ test("Member 只读：无添加表单与删除按钮", async ({ page }) => {
   await expect(page.getByRole("button", { name: "添加内容" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "删除" })).toHaveCount(0);
 });
+
+test("检索测试面板返回命中片段与相似度", async ({ page }) => {
+  await loginAs(page, "e2e-knowledge-search@example.com");
+  await page.goto("/knowledge");
+  await page.getByLabel("检索查询").fill("AIP 是什么");
+  await page.getByRole("button", { name: "检索" }).click();
+  const results = page.getByTestId("search-results");
+  await expect(results.getByTestId("search-hit")).toHaveCount(1);
+  await expect(results.getByText("AIP 是内部私有化的 AgentOS 控制台。")).toBeVisible();
+  await expect(results.getByText(/相似度 0\.9/)).toBeVisible();
+});

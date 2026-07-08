@@ -12,6 +12,14 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
+interface SearchHit {
+  id: string | null;
+  content: string;
+  name: string | null;
+  contentId: string | null;
+  score: number | null;
+}
+
 interface ContentRow {
   id: string;
   name: string;
@@ -134,6 +142,24 @@ export default function KnowledgePage() {
       method: "DELETE",
     });
     await load();
+  }
+
+  // --- 检索测试 ---
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchHit[] | null>(null);
+  const [searching, setSearching] = useState(false);
+
+  async function onSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!query.trim()) return;
+    setSearching(true);
+    const res = await fetch("/api/os/knowledge/search", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ query }),
+    });
+    setResults(res.ok ? ((await res.json()).data ?? []) : []);
+    setSearching(false);
   }
 
   return (
@@ -272,6 +298,52 @@ export default function KnowledgePage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>检索测试</CardTitle>
+          <CardDescription>
+            输入查询词，查看向量检索命中的片段与相似度，用于验证入库效果。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={onSearch} className="flex gap-2">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="输入查询词…"
+              aria-label="检索查询"
+              className={inputCls}
+            />
+            <Button type="submit" disabled={searching}>
+              {searching ? "检索中…" : "检索"}
+            </Button>
+          </form>
+
+          {results !== null && (
+            <div className="mt-4 space-y-2" data-testid="search-results">
+              {results.length === 0 && (
+                <p className="text-sm text-muted-foreground">没有命中任何片段。</p>
+              )}
+              {results.map((hit, i) => (
+                <div
+                  key={hit.id ?? i}
+                  className="rounded-md border border-border p-3"
+                  data-testid="search-hit"
+                >
+                  <div className="mb-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                    {hit.name && <Badge variant="outline">{hit.name}</Badge>}
+                    {hit.score !== null && (
+                      <span className="font-mono">相似度 {hit.score.toFixed(3)}</span>
+                    )}
+                  </div>
+                  <p className="text-sm whitespace-pre-wrap">{hit.content}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
