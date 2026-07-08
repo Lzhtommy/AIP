@@ -18,6 +18,7 @@ from agno.models.anthropic import Claude
 from agno.models.base import Model
 from agno.models.openai import OpenAIChat
 from agno.os import AgentOS
+from agno.os.config import AgentOSConfig, ChatConfig
 from agno.team import Team
 from agno.tools import tool
 from agno.tools.calculator import CalculatorTools
@@ -116,6 +117,17 @@ agent_os = AgentOS(
     teams=[demo_team],
     workflows=[demo_workflow],
     db=db,
+    config=AgentOSConfig(
+        chat=ChatConfig(
+            quick_prompts={
+                "demo-assistant": [
+                    "帮我算一下 137 × 73",
+                    "介绍一下 AIP 平台",
+                    "给 alice 发条通知",
+                ],
+            },
+        ),
+    ),
 )
 
 app = agent_os.get_app()

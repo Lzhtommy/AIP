@@ -40,6 +40,7 @@ function ChatPageInner() {
   const [input, setInput] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [quickPrompts, setQuickPrompts] = useState<string[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -95,6 +96,26 @@ function ChatPageInner() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat.messages]);
+
+  // 目标变化时拉取其快捷提示词
+  useEffect(() => {
+    if (!target) {
+      setQuickPrompts([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/os/quick-prompts?target=${encodeURIComponent(target.id)}`)
+      .then((r) => (r.ok ? r.json() : { prompts: [] }))
+      .then((body) => {
+        if (!cancelled) setQuickPrompts(body.prompts ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setQuickPrompts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [target]);
 
   async function run(message: string, images: File[] = []) {
     if (!target) return;
@@ -298,9 +319,29 @@ function ChatPageInner() {
           data-testid="message-list"
         >
           {chat.messages.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              选择左侧 Agent，输入消息开始对话。
-            </p>
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                选择左侧 Agent，输入消息开始对话。
+              </p>
+              {quickPrompts.length > 0 && (
+                <div
+                  className="flex flex-wrap gap-2"
+                  data-testid="quick-prompts"
+                >
+                  {quickPrompts.map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => {
+                        if (!busy) void run(p);
+                      }}
+                      className="rounded-full border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
           {chat.messages.map((m, i) => (
             <MessageBubble key={i} message={m} onConfirm={confirmTool} />

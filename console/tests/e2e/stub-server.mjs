@@ -411,6 +411,19 @@ createServer((req, res) => {
     res.end(JSON.stringify({ ...SESSION_LIST, data }));
     return;
   }
+  if (url === "/config") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        chat: {
+          quick_prompts: {
+            "demo-assistant": ["帮我算 137×73", "介绍一下 AIP"],
+          },
+        },
+      }),
+    );
+    return;
+  }
   if (url === "/health") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ status: "ok", version: "e2e-stub" }));
