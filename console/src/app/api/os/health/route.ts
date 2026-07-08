@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { resolveCurrentEndpoint } from "@/lib/endpoints";
+import { EndpointKeyError, resolveCurrentEndpoint } from "@/lib/endpoints";
+import { ENDPOINT_KEY_INVALID } from "@/lib/os-proxy";
 
 export async function GET() {
   const session = await auth();
@@ -11,7 +12,13 @@ export async function GET() {
     );
   }
 
-  const endpoint = await resolveCurrentEndpoint(session.user.id);
+  let endpoint;
+  try {
+    endpoint = await resolveCurrentEndpoint(session.user.id);
+  } catch (err) {
+    if (err instanceof EndpointKeyError) return ENDPOINT_KEY_INVALID(err.endpointName);
+    throw err;
+  }
   if (!endpoint) {
     return NextResponse.json(
       {

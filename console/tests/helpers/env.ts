@@ -1,6 +1,9 @@
-/** BFF 集成测试的控制台环境变量（依赖本地 compose postgres 已启动） */
+/**
+ * BFF 集成测试的控制台环境变量（依赖本地 compose postgres 已启动）。
+ * 注意：测试专用数据库 console_test，与 compose 运行库（console）严格分离。
+ */
 export const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL ?? "postgresql://ai:ai@localhost:5532/console";
+  process.env.TEST_DATABASE_URL ?? "postgresql://ai:ai@localhost:5532/console_test";
 
 export function consoleEnv(extra: Record<string, string> = {}) {
   return {

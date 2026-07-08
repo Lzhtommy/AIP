@@ -5,6 +5,7 @@ const APP_PORT = 3100;
 
 export default defineConfig({
   testDir: "tests/e2e",
+  globalSetup: "./tests/global-setup.ts",
   use: {
     baseURL: `http://127.0.0.1:${APP_PORT}`,
     // 测试全部打本机服务；禁用系统代理，避免本地回环流量被代理劫持
@@ -29,7 +30,7 @@ export default defineConfig({
         OS_SECURITY_KEY: "e2e-security-key",
         DATABASE_URL:
           process.env.TEST_DATABASE_URL ??
-          "postgresql://ai:ai@localhost:5532/console",
+          "postgresql://ai:ai@localhost:5532/console_test",
         AUTH_SECRET: "e2e-auth-secret",
         AUTH_TRUST_HOST: "true",
         ENCRYPTION_KEY: "e2e-encryption-key",

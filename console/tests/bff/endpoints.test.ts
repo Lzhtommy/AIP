@@ -147,6 +147,53 @@ describe("多端点管理", () => {
   });
 });
 
+describe("ENCRYPTION_KEY 更换后：结构化报错而非 500", () => {
+  let server: TestServer;
+  let stub: AgentOSStub;
+
+  beforeAll(async () => {
+    await resetUsers();
+    stub = new AgentOSStub().on("/health", { body: { status: "ok" } });
+    await stub.start();
+    // 用 key-A 启动并种子端点
+    const serverA = await startConsole(
+      consoleEnv({
+        OS_ENDPOINT_URL: stub.url,
+        OS_SECURITY_KEY: "seed-key",
+        ENCRYPTION_KEY: "encryption-key-A",
+      }),
+    );
+    await registerUser(serverA, "keyrot@example.com", PASSWORD);
+    const { cookie } = await login(serverA, "keyrot@example.com", PASSWORD);
+    const ok = await fetch(`${serverA.baseUrl}/api/os/health`, {
+      headers: { cookie },
+    });
+    expect(ok.status).toBe(200);
+    await serverA.stop();
+
+    // 换成 key-B 重启：已存密文无法解密
+    server = await startConsole(
+      consoleEnv({ ENCRYPTION_KEY: "encryption-key-B" }),
+    );
+  });
+
+  afterAll(async () => {
+    await server?.stop();
+    await stub?.stop();
+  });
+
+  it("返回 503 ENDPOINT_KEY_INVALID 与可操作的提示", async () => {
+    const { cookie } = await login(server, "keyrot@example.com", PASSWORD);
+    const res = await fetch(`${server.baseUrl}/api/os/health`, {
+      headers: { cookie },
+    });
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.error.code).toBe("ENDPOINT_KEY_INVALID");
+    expect(body.error.message).toContain("重新录入");
+  });
+});
+
 describe("env 种子：OS_ENDPOINT_URL 在表空时自动录入", () => {
   let server: TestServer;
   let stub: AgentOSStub;

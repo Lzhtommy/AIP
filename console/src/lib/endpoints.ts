@@ -10,12 +10,25 @@ export interface ResolvedEndpoint {
   securityKey: string;
 }
 
+/** 端点密钥解不开（ENCRYPTION_KEY 已更换或密文损坏）——需要管理员重新录入 */
+export class EndpointKeyError extends Error {
+  constructor(public endpointName: string) {
+    super(`端点「${endpointName}」的密钥无法解密`);
+  }
+}
+
 function toResolved(ep: Endpoint): ResolvedEndpoint {
+  let securityKey: string;
+  try {
+    securityKey = decryptSecret(ep.securityKeyCiphertext);
+  } catch {
+    throw new EndpointKeyError(ep.name);
+  }
   return {
     id: ep.id,
     name: ep.name,
     baseUrl: ep.baseUrl.replace(/\/+$/, ""),
-    securityKey: decryptSecret(ep.securityKeyCiphertext),
+    securityKey,
   };
 }
 

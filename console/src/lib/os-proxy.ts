@@ -1,6 +1,21 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { resolveCurrentEndpoint, type ResolvedEndpoint } from "@/lib/endpoints";
+import {
+  EndpointKeyError,
+  resolveCurrentEndpoint,
+  type ResolvedEndpoint,
+} from "@/lib/endpoints";
+
+export const ENDPOINT_KEY_INVALID = (name: string) =>
+  NextResponse.json(
+    {
+      error: {
+        code: "ENDPOINT_KEY_INVALID",
+        message: `端点「${name}」的密钥无法解密（ENCRYPTION_KEY 可能已更换）。请管理员在「端点设置」重新录入该端点的 Security Key`,
+      },
+    },
+    { status: 503 },
+  );
 
 export interface OsContext {
   endpoint: ResolvedEndpoint;
@@ -17,7 +32,13 @@ export async function withOsContext(): Promise<OsContext | NextResponse> {
       { status: 401 },
     );
   }
-  const endpoint = await resolveCurrentEndpoint(session.user.id);
+  let endpoint;
+  try {
+    endpoint = await resolveCurrentEndpoint(session.user.id);
+  } catch (err) {
+    if (err instanceof EndpointKeyError) return ENDPOINT_KEY_INVALID(err.endpointName);
+    throw err;
+  }
   if (!endpoint) {
     return NextResponse.json(
       { error: { code: "NO_ENDPOINT", message: "尚未配置任何 runtime 端点，请联系管理员" } },
