@@ -39,7 +39,9 @@ function ChatPageInner() {
   const [chat, setChat] = useState<ChatState>(initialChatState);
   const [input, setInput] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<File[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   // 代际计数：新会话/切换 Agent 后，旧流的迟到更新一律丢弃
   const genRef = useRef(0);
@@ -93,26 +95,38 @@ function ChatPageInner() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat.messages]);
 
-  async function run(message: string) {
+  async function run(message: string, images: File[] = []) {
     if (!target) return;
     const gen = genRef.current;
     const commit = (s: ChatState) => {
       if (genRef.current === gen) setChat(s);
     };
-    let state = startUserTurn(chat, message);
+    const previews = images.map((f) => ({
+      url: URL.createObjectURL(f),
+      name: f.name,
+    }));
+    let state = startUserTurn(chat, message, previews);
     commit(state);
 
     const controller = new AbortController();
     abortRef.current = controller;
     try {
+      // 有图片走 multipart，纯文本走 JSON
+      let body: BodyInit;
+      const headers: HeadersInit = {};
+      if (images.length > 0) {
+        const fd = new FormData();
+        fd.set("message", message);
+        if (state.sessionId) fd.set("sessionId", state.sessionId);
+        for (const f of images) fd.append("files", f, f.name);
+        body = fd;
+      } else {
+        headers["content-type"] = "application/json";
+        body = JSON.stringify({ message, sessionId: state.sessionId });
+      }
       const res = await fetch(
         `/api/os/${target.kind}/${encodeURIComponent(target.id)}/runs`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ message, sessionId: state.sessionId }),
-          signal: controller.signal,
-        },
+        { method: "POST", headers, body, signal: controller.signal },
       );
       if (!res.ok || !res.body) {
         const body = await res.json().catch(() => null);
@@ -145,9 +159,17 @@ function ChatPageInner() {
 
   function send() {
     const message = input.trim();
-    if (!message || chat.status === "streaming") return;
+    if ((!message && attachments.length === 0) || chat.status === "streaming") return;
+    const images = attachments;
     setInput("");
-    void run(message);
+    setAttachments([]);
+    void run(message || "（图片）", images);
+  }
+
+  function addFiles(files: FileList | null) {
+    if (!files) return;
+    const imgs = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    setAttachments((prev) => [...prev, ...imgs]);
   }
 
   function stop() {
@@ -243,6 +265,31 @@ function ChatPageInner() {
           <div ref={bottomRef} />
         </div>
 
+        {attachments.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2" data-testid="attachment-previews">
+            {attachments.map((f, i) => (
+              <div key={i} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={URL.createObjectURL(f)}
+                  alt={f.name}
+                  className="h-16 w-16 rounded-md border border-border object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAttachments((prev) => prev.filter((_, j) => j !== i))
+                  }
+                  aria-label="移除图片"
+                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-xs text-destructive-foreground"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <form
           className="mt-3 flex gap-2"
           onSubmit={(e) => {
@@ -251,8 +298,35 @@ function ChatPageInner() {
           }}
         >
           <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            aria-label="选择图片"
+            onChange={(e) => {
+              addFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!target || streaming}
+            onClick={() => fileRef.current?.click()}
+            title="添加图片"
+          >
+            📎
+          </Button>
+          <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onPaste={(e) => {
+              const files = Array.from(e.clipboardData.files);
+              if (files.some((f) => f.type.startsWith("image/"))) {
+                addFiles(e.clipboardData.files);
+              }
+            }}
             placeholder={target ? "输入消息…" : "暂无可用运行目标"}
             disabled={!target || streaming}
             aria-label="消息输入"

@@ -34,7 +34,14 @@ export interface StepPart {
   status: "running" | "done" | "error";
 }
 
-export type MessagePart = TextPart | ToolPart | MemberPart | StepPart;
+/** 图片附件（用户消息中的缩略图；data URL 或 http URL） */
+export interface ImagePart {
+  type: "image";
+  url: string;
+  name?: string;
+}
+
+export type MessagePart = TextPart | ToolPart | MemberPart | StepPart | ImagePart;
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -64,15 +71,23 @@ export function messageText(m: ChatMessage): string {
     .join("");
 }
 
-/** 用户发出一条消息：追加用户消息 + 空的助手消息占位，进入 streaming */
-export function startUserTurn(state: ChatState, text: string): ChatState {
+/** 用户发出一条消息：追加用户消息（可含图片）+ 空的助手消息占位，进入 streaming */
+export function startUserTurn(
+  state: ChatState,
+  text: string,
+  images: Array<{ url: string; name?: string }> = [],
+): ChatState {
+  const parts: MessagePart[] = [
+    ...images.map((img) => ({ type: "image" as const, url: img.url, name: img.name })),
+    { type: "text" as const, text },
+  ];
   return {
     ...state,
     status: "streaming",
     error: null,
     messages: [
       ...state.messages,
-      { role: "user", parts: [{ type: "text", text }] },
+      { role: "user", parts },
       { role: "assistant", parts: [] },
     ],
   };

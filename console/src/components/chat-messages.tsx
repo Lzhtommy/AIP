@@ -67,6 +67,32 @@ export function AssistantParts({ message }: { message: ChatMessage }) {
   );
 }
 
+/** 用户消息：图片缩略图 + 文本 */
+function UserParts({ message }: { message: ChatMessage }) {
+  const images = message.parts.filter((p) => p.type === "image");
+  return (
+    <div className="space-y-2">
+      {images.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {images.map((p, i) =>
+            p.type === "image" ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={i}
+                src={p.url}
+                alt={p.name ?? "图片"}
+                className="max-h-32 rounded-md border border-border"
+                data-testid="chat-image"
+              />
+            ) : null,
+          )}
+        </div>
+      )}
+      {messageText(message) && <div>{messageText(message)}</div>}
+    </div>
+  );
+}
+
 export function MessageBubble({ message }: { message: ChatMessage }) {
   return (
     <div
@@ -81,7 +107,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
         {message.role === "assistant" ? (
           <AssistantParts message={message} />
         ) : (
-          messageText(message)
+          <UserParts message={message} />
         )}
       </div>
     </div>
