@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 const port = Number(process.env.STUB_PORT ?? 45678);
 let lastSessionUserId = null;
 let lastTraceUserId = null;
+let lastMemoryUserId = null;
 
 const AGENTS = [
   {
@@ -147,8 +148,51 @@ const TRACE_TREE = {
   ],
 };
 
+let memoryDeleted = false;
+
+function memoryRow(userId) {
+  return {
+    memory_id: "mem-e2e",
+    memory: "用户喜欢简洁的中文回复",
+    topics: ["preferences"],
+    agent_id: "demo-assistant",
+    team_id: null,
+    user_id: userId,
+    updated_at: "2026-07-08T10:00:00Z",
+  };
+}
+
 createServer((req, res) => {
   const url = req.url ?? "";
+  if (url === "/memory_topics") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(["preferences"]));
+    return;
+  }
+  if (url.startsWith("/memories/mem-e2e")) {
+    if (req.method === "DELETE") {
+      memoryDeleted = true;
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(memoryRow(lastMemoryUserId ?? "any")));
+    return;
+  }
+  if (url.startsWith("/memories")) {
+    const userId = new URL(url, "http://x").searchParams.get("user_id");
+    if (userId) lastMemoryUserId = userId;
+    const data = memoryDeleted ? [] : [memoryRow(userId ?? "any")];
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        data,
+        meta: { page: 1, limit: 20, total_pages: 1, total_count: data.length },
+      }),
+    );
+    return;
+  }
   if (url.startsWith("/traces/tr-e2e")) {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(

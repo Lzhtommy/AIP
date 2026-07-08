@@ -49,6 +49,7 @@ demo_agent = Agent(
     db=db,
     tools=[CalculatorTools()],
     add_history_to_context=True,
+    enable_user_memories=True,
     markdown=True,
     instructions="你是 AIP 平台的演示助手。涉及计算时使用计算器工具。",
 )

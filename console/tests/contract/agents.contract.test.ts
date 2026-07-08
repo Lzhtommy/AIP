@@ -72,6 +72,22 @@ describe("Agno runtime 契约", () => {
     expect(body.meta).toHaveProperty("total_count");
   });
 
+  it("/memories 返回 {data, meta} 分页形状，/memory_topics 返回字符串数组", async ({ skip }) => {
+    if (!reachable) return skip();
+    const res = await fetch(`${RUNTIME_URL}/memories?limit=1`, {
+      headers: { authorization: `Bearer ${RUNTIME_KEY}` },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.meta).toHaveProperty("total_count");
+
+    const topics = await fetch(`${RUNTIME_URL}/memory_topics`, {
+      headers: { authorization: `Bearer ${RUNTIME_KEY}` },
+    });
+    expect(Array.isArray(await topics.json())).toBe(true);
+  });
+
   it("未带密钥访问 /agents 被拒绝（401/403）", async ({ skip }) => {
     if (!reachable) return skip();
     const res = await fetch(`${RUNTIME_URL}/agents`);
