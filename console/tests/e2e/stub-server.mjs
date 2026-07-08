@@ -6,6 +6,19 @@ let lastSessionUserId = null;
 let lastTraceUserId = null;
 let lastMemoryUserId = null;
 
+let evalRows = [
+  {
+    id: "ev-e2e",
+    agent_id: "demo-assistant",
+    name: "演示准确率评测",
+    evaluated_component_name: "Demo Assistant",
+    eval_type: "accuracy",
+    eval_data: { score: 8.5, max_score: 10 },
+    eval_input: { input: "137*73 等于多少" },
+    created_at: "2026-07-08T10:00:00Z",
+  },
+];
+
 const knowledgeRows = [
   {
     id: "kc-e2e",
@@ -179,6 +192,36 @@ function memoryRow(userId) {
 
 createServer((req, res) => {
   const url = req.url ?? "";
+  if (url.startsWith("/eval-runs")) {
+    const m = url.match(/^\/eval-runs\/([^/?]+)/);
+    if (m) {
+      const row = evalRows.find((r) => r.id === m[1]);
+      res.writeHead(row ? 200 : 404, { "content-type": "application/json" });
+      res.end(JSON.stringify(row ?? {}));
+      return;
+    }
+    if (req.method === "DELETE") {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        try {
+          const ids = JSON.parse(body).eval_run_ids ?? [];
+          evalRows = evalRows.filter((r) => !ids.includes(r.id));
+        } catch {}
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      });
+      return;
+    }
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        data: evalRows,
+        meta: { page: 1, limit: 20, total_pages: 1, total_count: evalRows.length },
+      }),
+    );
+    return;
+  }
   if (url.startsWith("/metrics/refresh") && req.method === "POST") {
     req.resume();
     req.on("end", () => {

@@ -23,16 +23,6 @@ test("首页渲染七个模块的导航项", async ({ page }) => {
   }
 });
 
-test("未实现模块显示「规划中」占位页", async ({ page }) => {
-  await page.goto("/");
-  await page
-    .getByRole("navigation", { name: "主导航" })
-    .getByRole("link", { name: "Evals 评测" })
-    .click();
-  await expect(page.getByRole("heading", { name: "Evals 评测" })).toBeVisible();
-  await expect(page.getByText("规划中")).toBeVisible();
-});
-
 test("状态页显示 runtime 运行正常与版本", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("运行正常")).toBeVisible();
