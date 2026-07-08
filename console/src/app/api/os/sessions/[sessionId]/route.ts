@@ -58,10 +58,13 @@ export async function GET(
   const kind = url.searchParams.get("kind") ?? "agents";
   if (!isOsKind(kind)) return NOT_FOUND();
   const type = KIND_TO_TYPE[kind as OsKind];
+  // Member 把 user_id 下推给 runtime 过滤（本地归属校验仍保留，纵深防御）
+  const scope =
+    ctx.role === "admin" ? "" : `&user_id=${encodeURIComponent(ctx.userId)}`;
 
   try {
     const detailRes = await fetch(
-      `${ctx.endpoint.baseUrl}/sessions/${encodeURIComponent(sessionId)}?type=${type}`,
+      `${ctx.endpoint.baseUrl}/sessions/${encodeURIComponent(sessionId)}?type=${type}${scope}`,
       {
         cache: "no-store",
         headers: osHeaders(ctx.endpoint),
@@ -77,7 +80,7 @@ export async function GET(
     }
 
     const runsRes = await fetch(
-      `${ctx.endpoint.baseUrl}/sessions/${encodeURIComponent(sessionId)}/runs?type=${type}`,
+      `${ctx.endpoint.baseUrl}/sessions/${encodeURIComponent(sessionId)}/runs?type=${type}${scope}`,
       {
         cache: "no-store",
         headers: osHeaders(ctx.endpoint),

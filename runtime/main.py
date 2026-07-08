@@ -13,12 +13,14 @@ import os
 
 from agno.agent import Agent
 from agno.db.postgres import PostgresDb
+from agno.knowledge.knowledge import Knowledge
 from agno.models.anthropic import Claude
 from agno.models.base import Model
 from agno.models.openai import OpenAIChat
 from agno.os import AgentOS
 from agno.team import Team
 from agno.tools.calculator import CalculatorTools
+from agno.vectordb.pgvector import PgVector
 from agno.workflow.step import Step
 from agno.workflow.workflow import Workflow
 
@@ -42,12 +44,24 @@ db = PostgresDb(
     )
 )
 
+_db_url = os.getenv("RUNTIME_DB_URL", "postgresql+psycopg://ai:ai@localhost:5532/ai")
+
+# 知识库：内容经 OpenAIEmbedder 向量化写入 PgVector。
+# 注意：embedding 依赖 OPENAI_API_KEY，即使 MODEL_PROVIDER=anthropic 也需要配置。
+knowledge = Knowledge(
+    name="AIP Knowledge",
+    contents_db=db,
+    vector_db=PgVector(db_url=_db_url, table_name="knowledge_vectors"),
+)
+
 demo_agent = Agent(
     id="demo-assistant",
     name="Demo Assistant",
     model=make_model(),
     db=db,
     tools=[CalculatorTools()],
+    knowledge=knowledge,
+    search_knowledge=True,
     add_history_to_context=True,
     enable_user_memories=True,
     markdown=True,

@@ -52,7 +52,7 @@ describe("Sessions BFF（Member 隔离）", () => {
         meta: { page: 1, limit: 20, total_pages: 1, total_count: 2 },
       },
     });
-    stub.on("/sessions/sess-mine?type=agent", {
+    stub.on(`/sessions/sess-mine?type=agent&user_id=${memberId}`, {
       body: {
         session_id: "sess-mine",
         session_name: "我的会话",
@@ -64,7 +64,7 @@ describe("Sessions BFF（Member 隔离）", () => {
         ],
       },
     });
-    stub.on("/sessions/sess-mine/runs?type=agent", {
+    stub.on(`/sessions/sess-mine/runs?type=agent&user_id=${memberId}`, {
       body: [
         {
           run_id: "run-1",
@@ -76,15 +76,16 @@ describe("Sessions BFF（Member 隔离）", () => {
         },
       ],
     });
-    stub.on("/sessions/sess-other?type=agent", {
-      body: {
-        session_id: "sess-other",
-        session_name: "别人的会话",
-        user_id: "someone-else",
-        agent_id: "demo-assistant",
-        chat_history: [],
-      },
-    });
+    const otherDetail = {
+      session_id: "sess-other",
+      session_name: "别人的会话",
+      user_id: "someone-else",
+      agent_id: "demo-assistant",
+      chat_history: [],
+    };
+    // Member 带 user_id 下推的请求与 Admin 不带的请求分别注册
+    stub.on(`/sessions/sess-other?type=agent&user_id=${memberId}`, { body: otherDetail });
+    stub.on("/sessions/sess-other?type=agent", { body: otherDetail });
   });
 
   afterAll(async () => {

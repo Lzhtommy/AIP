@@ -6,6 +6,21 @@ let lastSessionUserId = null;
 let lastTraceUserId = null;
 let lastMemoryUserId = null;
 
+const knowledgeRows = [
+  {
+    id: "kc-e2e",
+    name: "产品手册",
+    description: "内部产品说明",
+    type: "text",
+    size: 2048,
+    status: "completed",
+    status_message: "",
+    created_at: "2026-07-08T09:00:00Z",
+    updated_at: "2026-07-08T09:01:00Z",
+  },
+];
+let knowledgeSeq = 0;
+
 const AGENTS = [
   {
     id: "demo-assistant",
@@ -164,6 +179,52 @@ function memoryRow(userId) {
 
 createServer((req, res) => {
   const url = req.url ?? "";
+  // knowledge：有状态 stub（添加/删除/状态）
+  if (url.startsWith("/knowledge/content")) {
+    const m = url.match(/^\/knowledge\/content\/([^/?]+)(\/status)?/);
+    if (m && m[2]) {
+      const row = knowledgeRows.find((r) => r.id === m[1]);
+      res.writeHead(row ? 200 : 404, { "content-type": "application/json" });
+      res.end(JSON.stringify(row ? { id: row.id, status: row.status, status_message: "" } : {}));
+      return;
+    }
+    if (m && req.method === "DELETE") {
+      const idx = knowledgeRows.findIndex((r) => r.id === m[1]);
+      if (idx !== -1) knowledgeRows.splice(idx, 1);
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (req.method === "POST") {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        const nameMatch = body.match(/name="name"\r\n\r\n([^\r]+)/);
+        knowledgeRows.push({
+          id: `kc-new-${knowledgeSeq++}`,
+          name: nameMatch ? nameMatch[1] : "未命名",
+          description: null,
+          type: "text",
+          size: 128,
+          status: "completed",
+          status_message: "",
+          created_at: new Date(0).toISOString(),
+          updated_at: new Date(0).toISOString(),
+        });
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      });
+      return;
+    }
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        data: knowledgeRows,
+        meta: { page: 1, limit: 20, total_pages: 1, total_count: knowledgeRows.length },
+      }),
+    );
+    return;
+  }
   if (url === "/memory_topics") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify(["preferences"]));
@@ -219,10 +280,10 @@ createServer((req, res) => {
     return;
   }
   if (url.startsWith("/sessions/sess-e2e")) {
+    // BFF 对 Member 会下推 user_id，直接回显即可（无共享状态、并发安全）
     const userId = new URL(url, "http://x").searchParams.get("user_id");
-    // 详情不带 user_id 参数——回显列表请求最近一次见到的 user_id
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify(sessionDetail(lastSessionUserId ?? userId ?? "any")));
+    res.end(JSON.stringify(sessionDetail(userId ?? lastSessionUserId ?? "any")));
     return;
   }
   if (url.startsWith("/sessions")) {

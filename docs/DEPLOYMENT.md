@@ -41,6 +41,7 @@ runtime 端点种子录入（`OS_ENDPOINT_URL` 表空时生效）。
 - [ ] **备份 `ENCRYPTION_KEY`**——丢失后已存端点密钥不可恢复，只能重新录入
 - [ ] runtime 的 7777 端口只需对控制台容器可达，不必暴露给办公网（compose 内网络已隔离，移除 ports 映射即可收紧）
 - [ ] Google OAuth 在国内网络可能不可达（登录跳转需访问 google.com），GitHub 通常正常
+- [ ] 使用 Knowledge 知识库功能需配置 `OPENAI_API_KEY`（向量化走 OpenAI embedding），即使模型 provider 选 Anthropic 也是如此
 
 ## 升级
 
