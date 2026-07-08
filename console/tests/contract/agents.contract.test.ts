@@ -99,6 +99,17 @@ describe("Agno runtime 契约", () => {
     expect(body.meta).toHaveProperty("total_count");
   });
 
+  it("/metrics 返回 {metrics, updated_at} 形状", async ({ skip }) => {
+    if (!reachable) return skip();
+    const res = await fetch(`${RUNTIME_URL}/metrics`, {
+      headers: { authorization: `Bearer ${RUNTIME_KEY}` },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.metrics)).toBe(true);
+    expect(body).toHaveProperty("updated_at");
+  });
+
   it("未带密钥访问 /agents 被拒绝（401/403）", async ({ skip }) => {
     if (!reachable) return skip();
     const res = await fetch(`${RUNTIME_URL}/agents`);

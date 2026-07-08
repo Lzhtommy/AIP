@@ -27,9 +27,9 @@ test("未实现模块显示「规划中」占位页", async ({ page }) => {
   await page.goto("/");
   await page
     .getByRole("navigation", { name: "主导航" })
-    .getByRole("link", { name: "Metrics 指标" })
+    .getByRole("link", { name: "Evals 评测" })
     .click();
-  await expect(page.getByRole("heading", { name: "Metrics 指标" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Evals 评测" })).toBeVisible();
   await expect(page.getByText("规划中")).toBeVisible();
 });
 

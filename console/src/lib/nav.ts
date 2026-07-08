@@ -12,6 +12,6 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "memory", label: "Memory 记忆", href: "/memory", planned: false },
   { id: "knowledge", label: "Knowledge 知识库", href: "/knowledge", planned: false },
   { id: "traces", label: "Traces 追踪", href: "/traces", planned: false },
-  { id: "metrics", label: "Metrics 指标", href: "/metrics", planned: true },
+  { id: "metrics", label: "Metrics 指标", href: "/metrics", planned: false },
   { id: "evals", label: "Evals 评测", href: "/evals", planned: true },
 ];

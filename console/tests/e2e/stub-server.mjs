@@ -179,6 +179,32 @@ function memoryRow(userId) {
 
 createServer((req, res) => {
   const url = req.url ?? "";
+  if (url.startsWith("/metrics/refresh") && req.method === "POST") {
+    req.resume();
+    req.on("end", () => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+    });
+    return;
+  }
+  if (url.startsWith("/metrics")) {
+    const day = (date, runs, tokens, users) => ({
+      date,
+      agent_runs_count: runs,
+      team_runs_count: 0,
+      workflow_runs_count: 0,
+      users_count: users,
+      token_metrics: { total_tokens: tokens },
+    });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        metrics: [day("2026-07-06", 3, 1000, 2), day("2026-07-07", 5, 2000, 3)],
+        updated_at: "2026-07-08T00:00:00Z",
+      }),
+    );
+    return;
+  }
   if (url === "/knowledge/search" && req.method === "POST") {
     req.resume();
     req.on("end", () => {
