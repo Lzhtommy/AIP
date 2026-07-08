@@ -45,6 +45,33 @@ const AGENTS = [
     name: "Slow Agent",
     model: { provider: "OpenAI", model: "gpt-4.1-mini" },
   },
+  {
+    id: "notify-agent",
+    name: "Notify Agent",
+    model: { provider: "OpenAI", model: "gpt-4.1-mini" },
+  },
+];
+
+const PAUSE_EVENTS = [
+  { event: "RunStarted", run_id: "run-hitl", session_id: "sess-hitl" },
+  {
+    event: "RunPaused",
+    run_id: "run-hitl",
+    session_id: "sess-hitl",
+    tools: [
+      {
+        tool_call_id: "tc-hitl",
+        tool_name: "send_notification",
+        tool_args: { recipient: "alice", message: "hi" },
+        requires_confirmation: true,
+      },
+    ],
+  },
+];
+
+const CONTINUE_EVENTS = [
+  { event: "RunContent", content: "已发送通知给 alice。" },
+  { event: "RunCompleted" },
 ];
 
 const RUN_EVENTS = [
@@ -402,6 +429,32 @@ createServer((req, res) => {
   if (url === "/workflows") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify(WORKFLOWS));
+    return;
+  }
+  if (url === "/agents/notify-agent/runs/run-hitl/continue" && req.method === "POST") {
+    req.resume();
+    req.on("end", () => {
+      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+      let i = 0;
+      const timer = setInterval(() => {
+        if (i >= CONTINUE_EVENTS.length) { clearInterval(timer); res.end(); return; }
+        res.write(`data: ${JSON.stringify(CONTINUE_EVENTS[i++])}\n\n`);
+      }, 60);
+      res.on("close", () => clearInterval(timer));
+    });
+    return;
+  }
+  if (url === "/agents/notify-agent/runs" && req.method === "POST") {
+    req.resume();
+    req.on("end", () => {
+      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+      let i = 0;
+      const timer = setInterval(() => {
+        if (i >= PAUSE_EVENTS.length) { clearInterval(timer); res.end(); return; }
+        res.write(`data: ${JSON.stringify(PAUSE_EVENTS[i++])}\n\n`);
+      }, 60);
+      res.on("close", () => clearInterval(timer));
+    });
     return;
   }
   const runMatch = url.match(

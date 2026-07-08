@@ -4,11 +4,19 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ToolCallCard } from "@/components/tool-call-card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { messageText, type ChatMessage } from "@/lib/chat/reducer";
 import { cn } from "@/lib/utils";
 
-/** 助手消息的 parts 渲染：实时对话与会话回放共用，保证两处观感一致 */
-export function AssistantParts({ message }: { message: ChatMessage }) {
+/** 助手消息的 parts 渲染：实时对话与会话回放共用，保证两处观感一致。
+ *  onConfirm 存在时，pending 的审批卡片显示批准/拒绝按钮。 */
+export function AssistantParts({
+  message,
+  onConfirm,
+}: {
+  message: ChatMessage;
+  onConfirm?: (toolCallId: string, approved: boolean) => void;
+}) {
   return (
     <>
       {message.parts.map((p, i) => {
@@ -57,6 +65,40 @@ export function AssistantParts({ message }: { message: ChatMessage }) {
                 </Badge>
               </div>
             );
+          case "confirmation":
+            return (
+              <div
+                key={i}
+                className="my-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
+                data-testid="confirmation-card"
+              >
+                <div className="mb-1 flex items-center gap-2">
+                  <span>⚠️</span>
+                  <span className="font-medium">工具审批：{p.name}</span>
+                  {p.status === "approved" && <Badge variant="secondary">已批准</Badge>}
+                  {p.status === "rejected" && <Badge variant="destructive">已拒绝</Badge>}
+                </div>
+                {p.args && (
+                  <pre className="mb-2 overflow-x-auto rounded bg-muted p-2 text-xs">
+                    {JSON.stringify(p.args, null, 2)}
+                  </pre>
+                )}
+                {p.status === "pending" && onConfirm && (
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => onConfirm(p.toolCallId, true)}>
+                      批准
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onConfirm(p.toolCallId, false)}
+                    >
+                      拒绝
+                    </Button>
+                  </div>
+                )}
+              </div>
+            );
         }
       })}
       {message.parts.length === 0 && <span>…</span>}
@@ -93,7 +135,13 @@ function UserParts({ message }: { message: ChatMessage }) {
   );
 }
 
-export function MessageBubble({ message }: { message: ChatMessage }) {
+export function MessageBubble({
+  message,
+  onConfirm,
+}: {
+  message: ChatMessage;
+  onConfirm?: (toolCallId: string, approved: boolean) => void;
+}) {
   return (
     <div
       className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}
@@ -105,7 +153,7 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
         )}
       >
         {message.role === "assistant" ? (
-          <AssistantParts message={message} />
+          <AssistantParts message={message} onConfirm={onConfirm} />
         ) : (
           <UserParts message={message} />
         )}

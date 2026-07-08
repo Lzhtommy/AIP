@@ -19,6 +19,7 @@ from agno.models.base import Model
 from agno.models.openai import OpenAIChat
 from agno.os import AgentOS
 from agno.team import Team
+from agno.tools import tool
 from agno.tools.calculator import CalculatorTools
 from agno.vectordb.pgvector import PgVector
 from agno.workflow.step import Step
@@ -54,12 +55,23 @@ knowledge = Knowledge(
     vector_db=PgVector(db_url=_db_url, table_name="knowledge_vectors"),
 )
 
+@tool(requires_confirmation=True)
+def send_notification(recipient: str, message: str) -> str:
+    """发送通知给指定接收人（高风险操作，需人工审批）。
+
+    Args:
+        recipient: 接收人
+        message: 通知内容
+    """
+    return f"已向 {recipient} 发送通知：{message}"
+
+
 demo_agent = Agent(
     id="demo-assistant",
     name="Demo Assistant",
     model=make_model(),
     db=db,
-    tools=[CalculatorTools()],
+    tools=[CalculatorTools(), send_notification],
     knowledge=knowledge,
     search_knowledge=True,
     add_history_to_context=True,

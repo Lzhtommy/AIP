@@ -83,6 +83,7 @@ function ChatPageInner() {
             sessionId,
             status: "idle",
             error: null,
+            pausedRunId: null,
           });
         }
       }
@@ -128,23 +129,7 @@ function ChatPageInner() {
         `/api/os/${target.kind}/${encodeURIComponent(target.id)}/runs`,
         { method: "POST", headers, body, signal: controller.signal },
       );
-      if (!res.ok || !res.body) {
-        const body = await res.json().catch(() => null);
-        state = reduceChatEvent(state, {
-          event: "RunError",
-          content: body?.error?.message ?? `请求失败（${res.status}）`,
-        });
-        commit(state);
-        return;
-      }
-      for await (const event of parseSseStream(res.body)) {
-        state = reduceChatEvent(state, event);
-        commit(state);
-      }
-      if (state.status === "streaming") {
-        state = reduceChatEvent(state, { event: "RunCompleted" });
-        commit(state);
-      }
+      await consume(res, () => state, (s) => (state = s), commit, controller);
     } catch (err) {
       const aborted = err instanceof DOMException && err.name === "AbortError";
       state = reduceChatEvent(
@@ -157,9 +142,76 @@ function ChatPageInner() {
     }
   }
 
+  // 消费一段 SSE 流：归约事件并提交，兜底收尾。paused 状态不强制 RunCompleted。
+  async function consume(
+    res: Response,
+    get: () => ChatState,
+    setLocal: (s: ChatState) => void,
+    commit: (s: ChatState) => void,
+    controller: AbortController,
+  ) {
+    void controller;
+    if (!res.ok || !res.body) {
+      const body = await res.json().catch(() => null);
+      const s = reduceChatEvent(get(), {
+        event: "RunError",
+        content: body?.error?.message ?? `请求失败（${res.status}）`,
+      });
+      setLocal(s);
+      commit(s);
+      return;
+    }
+    for await (const event of parseSseStream(res.body)) {
+      const s = reduceChatEvent(get(), event);
+      setLocal(s);
+      commit(s);
+    }
+    if (get().status === "streaming") {
+      const s = reduceChatEvent(get(), { event: "RunCompleted" });
+      setLocal(s);
+      commit(s);
+    }
+  }
+
+  // 批准/拒绝审批 → 本地标记 → POST continue 恢复流
+  async function confirmTool(toolCallId: string, approved: boolean) {
+    if (!target || chat.status !== "paused" || !chat.pausedRunId) return;
+    const gen = genRef.current;
+    const commit = (s: ChatState) => {
+      if (genRef.current === gen) setChat(s);
+    };
+    let state = reduceChatEvent(chat, { event: "__confirm", toolCallId, approved });
+    commit(state);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const res = await fetch(
+        `/api/os/${target.kind}/${encodeURIComponent(target.id)}/runs/${encodeURIComponent(
+          chat.pausedRunId,
+        )}/continue`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            sessionId: state.sessionId,
+            tools: [{ tool_call_id: toolCallId, confirmed: approved }],
+          }),
+          signal: controller.signal,
+        },
+      );
+      await consume(res, () => state, (s) => (state = s), commit, controller);
+    } catch {
+      state = reduceChatEvent(state, { event: "RunError", content: "连接中断" });
+      commit(state);
+    } finally {
+      abortRef.current = null;
+    }
+  }
+
   function send() {
     const message = input.trim();
-    if ((!message && attachments.length === 0) || chat.status === "streaming") return;
+    if ((!message && attachments.length === 0) || busy) return;
     const images = attachments;
     setInput("");
     setAttachments([]);
@@ -189,6 +241,7 @@ function ChatPageInner() {
 
   
   const streaming = chat.status === "streaming";
+  const busy = streaming || chat.status === "paused";
 
   return (
     <div className="flex h-full gap-6">
@@ -250,7 +303,7 @@ function ChatPageInner() {
             </p>
           )}
           {chat.messages.map((m, i) => (
-            <MessageBubble key={i} message={m} />
+            <MessageBubble key={i} message={m} onConfirm={confirmTool} />
           ))}
           {chat.status === "error" && (
             <div className="flex items-center gap-3">
@@ -312,7 +365,7 @@ function ChatPageInner() {
           <Button
             type="button"
             variant="outline"
-            disabled={!target || streaming}
+            disabled={!target || busy}
             onClick={() => fileRef.current?.click()}
             title="添加图片"
           >
@@ -328,7 +381,7 @@ function ChatPageInner() {
               }
             }}
             placeholder={target ? "输入消息…" : "暂无可用运行目标"}
-            disabled={!target || streaming}
+            disabled={!target || busy}
             aria-label="消息输入"
             className="flex-1 rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
@@ -337,7 +390,7 @@ function ChatPageInner() {
               停止
             </Button>
           ) : (
-            <Button type="submit" disabled={!target}>
+            <Button type="submit" disabled={!target || busy}>
               发送
             </Button>
           )}

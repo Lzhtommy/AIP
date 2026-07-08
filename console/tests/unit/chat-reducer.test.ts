@@ -191,6 +191,60 @@ describe("chat 归约层：SSE 事件 → 消息状态树", () => {
     expect(messageText(lastAssistant(s))).toBe("产出文本");
   });
 
+  it("RunPaused 生成待确认节点，携带 run_id 与工具入参", () => {
+    let s = startUserTurn(initialChatState, "给 alice 发通知");
+    s = play(s, [
+      RUN_STARTED,
+      {
+        event: "RunPaused",
+        run_id: "run-42",
+        session_id: "sess-1",
+        tools: [
+          {
+            tool_call_id: "tc-9",
+            tool_name: "send_notification",
+            tool_args: { recipient: "alice", message: "hi" },
+            requires_confirmation: true,
+          },
+        ],
+      },
+    ]);
+    expect(s.status).toBe("paused");
+    expect(s.pausedRunId).toBe("run-42");
+    const conf = lastAssistant(s).parts.find((p) => p.type === "confirmation")!;
+    expect(conf).toMatchObject({
+      type: "confirmation",
+      toolCallId: "tc-9",
+      name: "send_notification",
+      status: "pending",
+    });
+    expect(conf.type === "confirmation" && conf.args).toEqual({
+      recipient: "alice",
+      message: "hi",
+    });
+  });
+
+  it("确认后 RunContent/RunCompleted 恢复流并标记确认结果", () => {
+    let s = startUserTurn(initialChatState, "发通知");
+    s = play(s, [
+      RUN_STARTED,
+      {
+        event: "RunPaused",
+        run_id: "run-42",
+        tools: [{ tool_call_id: "tc-9", tool_name: "send_notification", requires_confirmation: true }],
+      },
+    ]);
+    // 本地标记已批准（前端在 POST continue 前调用）
+    s = reduceChatEvent(s, { event: "__confirm", toolCallId: "tc-9", approved: true });
+    expect(s.status).toBe("streaming");
+    const conf = lastAssistant(s).parts.find((p) => p.type === "confirmation")!;
+    expect(conf.type === "confirmation" && conf.status).toBe("approved");
+
+    s = play(s, [{ event: "RunContent", content: "已发送" }, { event: "RunCompleted" }]);
+    expect(s.status).toBe("idle");
+    expect(messageText(lastAssistant(s))).toBe("已发送");
+  });
+
   it("interruptRun 立即结束 streaming 并标注中断", () => {
     let s = startUserTurn(initialChatState, "长任务");
     s = play(s, [RUN_STARTED, { event: "RunContent", content: "写到一半" }]);

@@ -41,7 +41,22 @@ export interface ImagePart {
   name?: string;
 }
 
-export type MessagePart = TextPart | ToolPart | MemberPart | StepPart | ImagePart;
+/** 工具执行审批节点（HITL）：暂停等待用户批准/拒绝 */
+export interface ConfirmationPart {
+  type: "confirmation";
+  toolCallId: string;
+  name: string;
+  args?: Record<string, unknown>;
+  status: "pending" | "approved" | "rejected";
+}
+
+export type MessagePart =
+  | TextPart
+  | ToolPart
+  | MemberPart
+  | StepPart
+  | ImagePart
+  | ConfirmationPart;
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -52,8 +67,10 @@ export interface ChatMessage {
 export interface ChatState {
   messages: ChatMessage[];
   sessionId: string | null;
-  status: "idle" | "streaming" | "error";
+  status: "idle" | "streaming" | "error" | "paused";
   error: string | null;
+  /** 处于 paused 时，待继续的 run_id */
+  pausedRunId: string | null;
 }
 
 export const initialChatState: ChatState = {
@@ -61,6 +78,7 @@ export const initialChatState: ChatState = {
   sessionId: null,
   status: "idle",
   error: null,
+  pausedRunId: null,
 };
 
 /** 派生消息纯文本（测试与预览用） */
@@ -123,6 +141,7 @@ interface RawTool {
   tool_name?: string;
   tool_args?: Record<string, unknown>;
   result?: unknown;
+  requires_confirmation?: boolean;
 }
 
 function toolFromEvent(raw: Record<string, unknown>): RawTool {
@@ -242,8 +261,41 @@ export function reduceChatEvent(
         return { ...m, parts };
       });
     }
+    case "RunPaused": {
+      const runId = typeof raw.run_id === "string" ? raw.run_id : state.pausedRunId;
+      const tools = Array.isArray(raw.tools) ? (raw.tools as RawTool[]) : [];
+      const confirmations: ConfirmationPart[] = tools
+        .filter((t) => t.requires_confirmation)
+        .map((t, i) => ({
+          type: "confirmation",
+          toolCallId: t.tool_call_id ?? `conf-${i}`,
+          name: t.tool_name ?? "unknown",
+          args: t.tool_args,
+          status: "pending",
+        }));
+      return patchLastAssistant(
+        { ...state, status: "paused", pausedRunId: runId },
+        (m) => ({ ...m, parts: [...m.parts, ...confirmations] }),
+      );
+    }
+    // 内部事件：用户批准/拒绝待确认工具（前端在 POST continue 前调用）
+    case "__confirm": {
+      const toolCallId = String(raw.toolCallId ?? "");
+      const approved = raw.approved === true;
+      return patchLastAssistant(
+        { ...state, status: "streaming" },
+        (m) => ({
+          ...m,
+          parts: m.parts.map((p) =>
+            p.type === "confirmation" && p.toolCallId === toolCallId
+              ? { ...p, status: approved ? "approved" : "rejected" }
+              : p,
+          ),
+        }),
+      );
+    }
     case "RunCompleted":
-      return { ...state, status: "idle" };
+      return { ...state, status: "idle", pausedRunId: null };
     case "RunError": {
       const message =
         typeof raw.content === "string" && raw.content ? raw.content : "运行失败";
