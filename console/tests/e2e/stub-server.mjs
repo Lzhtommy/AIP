@@ -429,6 +429,26 @@ createServer((req, res) => {
     res.end(JSON.stringify({ status: "ok", version: "e2e-stub" }));
     return;
   }
+  if (url === "/agents/demo-assistant") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        id: "demo-assistant",
+        name: "Demo Assistant",
+        model: { provider: "OpenAI", model: "gpt-4.1-mini" },
+        system_message: { instructions: "你是 AIP 演示助手" },
+        knowledge: { knowledge_table: "agno_knowledge" },
+        memory: { enable_user_memories: true },
+        tools: {
+          tools: [
+            { name: "multiply", requires_confirmation: false },
+            { name: "send_notification", description: "发通知", requires_confirmation: true },
+          ],
+        },
+      }),
+    );
+    return;
+  }
   if (url === "/agents") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify(AGENTS));

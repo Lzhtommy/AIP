@@ -32,6 +32,20 @@ const KIND_LABEL: Record<TargetKind, string> = {
   workflows: "Workflows",
 };
 
+interface TargetDetail {
+  id: string;
+  name: string;
+  kind: TargetKind;
+  description: string | null;
+  model: { provider: string | null; model: string | null } | null;
+  instructions: string | null;
+  knowledgeEnabled: boolean;
+  memoryEnabled: boolean;
+  tools: Array<{ name: string; description: string | null; requiresConfirmation: boolean }>;
+  members: Array<{ id: string; name: string; role: string | null }>;
+  steps: string[];
+}
+
 function ChatPageInner() {
   const search = useSearchParams();
   const [targets, setTargets] = useState<TargetItem[]>([]);
@@ -41,6 +55,8 @@ function ChatPageInner() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [quickPrompts, setQuickPrompts] = useState<string[]>([]);
+  const [detail, setDetail] = useState<TargetDetail | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -97,8 +113,10 @@ function ChatPageInner() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat.messages]);
 
-  // 目标变化时拉取其快捷提示词
+  // 目标变化时拉取其快捷提示词与配置详情
   useEffect(() => {
+    setShowDetail(false);
+    setDetail(null);
     if (!target) {
       setQuickPrompts([]);
       return;
@@ -112,6 +130,12 @@ function ChatPageInner() {
       .catch(() => {
         if (!cancelled) setQuickPrompts([]);
       });
+    fetch(`/api/os/${target.kind}/${encodeURIComponent(target.id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled) setDetail(d);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -309,10 +333,94 @@ function ChatPageInner() {
             <h1 className="text-lg font-semibold">{target?.name ?? "Chat"}</h1>
             {chat.sessionId && <Badge variant="outline">会话中</Badge>}
           </div>
-          <Button variant="outline" size="sm" onClick={newSession}>
-            新会话
-          </Button>
+          <div className="flex gap-2">
+            {detail && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDetail((v) => !v)}
+              >
+                {showDetail ? "隐藏配置" : "查看配置"}
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={newSession}>
+              新会话
+            </Button>
+          </div>
         </div>
+
+        {showDetail && detail && (
+          <div
+            className="mb-3 space-y-3 rounded-md border border-border p-4 text-sm"
+            data-testid="target-detail"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">{detail.name}</span>
+              <Badge variant="secondary">{KIND_LABEL[detail.kind]}</Badge>
+              {detail.model?.model && (
+                <Badge variant="outline">
+                  {detail.model.provider ? `${detail.model.provider} / ` : ""}
+                  {detail.model.model}
+                </Badge>
+              )}
+              {detail.knowledgeEnabled && <Badge variant="outline">Knowledge</Badge>}
+              {detail.memoryEnabled && <Badge variant="outline">Memory</Badge>}
+            </div>
+            {detail.description && (
+              <p className="text-muted-foreground">{detail.description}</p>
+            )}
+            {detail.instructions && (
+              <div>
+                <p className="mb-1 text-xs text-muted-foreground">System Prompt</p>
+                <pre className="overflow-x-auto rounded bg-muted p-2 text-xs whitespace-pre-wrap">
+                  {detail.instructions}
+                </pre>
+              </div>
+            )}
+            {detail.tools.length > 0 && (
+              <div>
+                <p className="mb-1 text-xs text-muted-foreground">
+                  工具（{detail.tools.length}）
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {detail.tools.map((t) => (
+                    <Badge
+                      key={t.name}
+                      variant="outline"
+                      title={t.description ?? undefined}
+                    >
+                      {t.name}
+                      {t.requiresConfirmation && " 🔒"}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+            {detail.members.length > 0 && (
+              <div>
+                <p className="mb-1 text-xs text-muted-foreground">成员</p>
+                <ul className="space-y-0.5 text-xs">
+                  {detail.members.map((m) => (
+                    <li key={m.id}>
+                      {m.name}
+                      {m.role && <span className="text-muted-foreground">（{m.role}）</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {detail.steps.length > 0 && (
+              <div>
+                <p className="mb-1 text-xs text-muted-foreground">步骤</p>
+                <ol className="list-decimal space-y-0.5 pl-5 text-xs">
+                  {detail.steps.map((s, i) => (
+                    <li key={i}>{s}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
+          </div>
+        )}
 
         <div
           className="flex-1 space-y-4 overflow-y-auto rounded-md border border-border p-4"
