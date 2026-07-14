@@ -47,6 +47,13 @@ function mapNode(node: UpstreamNode, index = 0): TraceTreeNode {
   };
 }
 
+/** runtime 的 tree 可能是根节点数组、单节点或缺省，统一成数组 */
+function normalizeRoots(tree: unknown): UpstreamNode[] {
+  if (Array.isArray(tree)) return tree as UpstreamNode[];
+  if (tree && typeof tree === "object") return [tree as UpstreamNode];
+  return [];
+}
+
 const NOT_FOUND = () =>
   NextResponse.json(
     { error: { code: "TRACE_NOT_FOUND", message: "Trace 不存在" } },
@@ -88,7 +95,8 @@ export async function GET(
       errorCount: detail.error_count ?? null,
       sessionId: detail.session_id ?? null,
       userId: detail.user_id ?? null,
-      tree: detail.tree ? mapNode(detail.tree) : null,
+      // runtime 的 tree 是根节点数组（一个 trace 可有多个根 span）
+      roots: normalizeRoots(detail.tree).map((n, i) => mapNode(n, i)),
     });
   } catch {
     return UNREACHABLE();

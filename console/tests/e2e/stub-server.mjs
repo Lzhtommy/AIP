@@ -374,7 +374,7 @@ createServer((req, res) => {
   if (url.startsWith("/traces/tr-e2e")) {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(
-      JSON.stringify({ ...TRACE_SUMMARY, user_id: lastTraceUserId ?? "any", tree: TRACE_TREE }),
+      JSON.stringify({ ...TRACE_SUMMARY, user_id: lastTraceUserId ?? "any", tree: [TRACE_TREE] }),
     );
     return;
   }

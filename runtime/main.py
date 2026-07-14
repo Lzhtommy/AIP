@@ -117,6 +117,9 @@ agent_os = AgentOS(
     teams=[demo_team],
     workflows=[demo_workflow],
     db=db,
+    # 开启执行追踪：span 写入共享 db，控制台 Traces 页读取。
+    # 依赖 openinference-instrumentation-agno（已在 pyproject 声明）。
+    tracing=True,
     config=AgentOSConfig(
         chat=ChatConfig(
             quick_prompts={

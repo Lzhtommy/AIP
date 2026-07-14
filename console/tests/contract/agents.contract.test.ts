@@ -131,6 +131,23 @@ describe("Agno runtime 契约", () => {
     expect(body.chat?.quick_prompts?.["demo-assistant"]).toBeInstanceOf(Array);
   });
 
+  it("trace 详情 tree 为根节点数组（tracing 启用后）", async ({ skip }) => {
+    if (!reachable) return skip();
+    const list = await (
+      await fetch(`${RUNTIME_URL}/traces?limit=1`, {
+        headers: { authorization: `Bearer ${RUNTIME_KEY}` },
+      })
+    ).json();
+    if (!list.data?.length) return skip(); // 无 trace 数据时跳过
+    const id = list.data[0].trace_id;
+    const detail = await (
+      await fetch(`${RUNTIME_URL}/traces/${id}`, {
+        headers: { authorization: `Bearer ${RUNTIME_KEY}` },
+      })
+    ).json();
+    expect(Array.isArray(detail.tree)).toBe(true);
+  });
+
   it("未带密钥访问 /agents 被拒绝（401/403）", async ({ skip }) => {
     if (!reachable) return skip();
     const res = await fetch(`${RUNTIME_URL}/agents`);

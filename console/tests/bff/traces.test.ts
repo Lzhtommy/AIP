@@ -97,11 +97,11 @@ describe("Traces BFF", () => {
         user_id: memberId,
         session_id: "sess-1",
         agent_id: "demo-assistant",
-        tree: TREE,
+        tree: [TREE],
       },
     });
     stub.on("/traces/tr-other", {
-      body: { trace_id: "tr-other", user_id: "someone-else", tree: TREE },
+      body: { trace_id: "tr-other", user_id: "someone-else", tree: [TREE] },
     });
   });
 
@@ -141,12 +141,14 @@ describe("Traces BFF", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.traceId).toBe("tr-mine");
-    expect(body.tree.name).toBe("Demo Assistant.run");
-    expect(body.tree.children).toHaveLength(2);
-    const toolNode = body.tree.children[1];
+    // roots 是根节点数组（runtime 的 tree 是列表）
+    const root = body.roots[0];
+    expect(root.name).toBe("Demo Assistant.run");
+    expect(root.children).toHaveLength(2);
+    const toolNode = root.children[1];
     expect(toolNode).toMatchObject({ status: "error", error: "除零错误" });
     // token 元数据透传
-    expect(body.tree.children[0].metadata).toMatchObject({ input_tokens: 120 });
+    expect(root.children[0].metadata).toMatchObject({ input_tokens: 120 });
   });
 
   it("Member 访问他人 trace 返回 404，Admin 可以", async () => {

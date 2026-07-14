@@ -28,7 +28,7 @@ interface TraceDetail {
   totalSpans: number | null;
   errorCount: number | null;
   sessionId: string | null;
-  tree: TreeNode | null;
+  roots: TreeNode[];
 }
 
 function formatDuration(ms: number | null): string {
@@ -167,8 +167,10 @@ export default function TraceDetailPage() {
       </div>
 
       <div className="rounded-md border border-border p-2" data-testid="trace-tree">
-        {detail.tree ? (
-          <TraceNodeRow node={detail.tree} depth={0} />
+        {detail.roots.length > 0 ? (
+          detail.roots.map((root, i) => (
+            <TraceNodeRow key={root.id ?? i} node={root} depth={0} />
+          ))
         ) : (
           <p className="p-2 text-sm text-muted-foreground">该 Trace 没有调用树数据。</p>
         )}
